@@ -1,0 +1,23 @@
+{
+  "name": "buddymac",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/app.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test ./src ./native/files/files.test.ts ./native/dock/dock.test.ts ./native/liny/regression.test.ts ./native/liny/transport.test.ts ./native/focus/notifications",
+    "build": "bun scripts/build.ts",
+    "verify": "bun scripts/verify-ui.ts"
+  },
+  "dependencies": {
+    "@gpuix/react": "0.10.0",
+    "@gpuix/native": "0.10.0",
+    "react": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}

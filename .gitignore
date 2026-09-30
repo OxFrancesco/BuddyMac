@@ -1,0 +1,13 @@
+resources/
+node_modules/
+native/liny/agent/node_modules/
+dist/
+.DS_Store
+native/speech/build/
+*.bun-build
+
+# Generated reports and verification captures. They contain screenshots of personal data.
+evidence/
+report/
+feature-report/
+ui-report/

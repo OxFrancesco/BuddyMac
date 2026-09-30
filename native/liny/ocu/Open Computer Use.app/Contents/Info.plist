@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>OpenComputerUse</string>
+<key>CFBundleIdentifier</key><string>app.liny.computeruse</string>
+<key>CFBundleName</key><string>Liny Computer Use</string>
+<key>CFBundleDisplayName</key><string>Liny Computer Use</string>
+<key>CFBundleShortVersionString</key><string>0.3.3</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSUIElement</key><true/>
+<key>NSAccessibilityUsageDescription</key><string>Liny operates the apps you request.</string>
+<key>NSScreenCaptureUsageDescription</key><string>Liny observes the windows needed for your task.</string>
+</dict></plist>

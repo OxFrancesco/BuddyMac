@@ -1,0 +1,4 @@
+[extend]
+useDefault = true
+[allowlist]
+paths = ['''node_modules/''', '''resources/''', '''dist/''', '''native/liny/agent/node_modules/''', '''native/liny/ocu/''', '''native/speech/build/''', '''evidence/''', '''\.git/''']
