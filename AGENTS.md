@@ -16,6 +16,7 @@ folder to gather information, feedback, patterns, and templates before writing c
 - `bun run typecheck`, `bun run test`, `bun run verify` (native UI walkthrough with fixture stores), `bun run build` (signed app in `dist/BuddyMac.app`).
 - `BUDDYMAC_VERIFY_APP="$PWD/dist/BuddyMac.app/Contents/MacOS/BuddyMac" bun run verify` runs the same walkthrough against the packaged app.
 - `bun scripts/capture-views.ts [outDir]` screenshots every view, settings panel and compact view with fixture data (default `/private/tmp/buddymac-views`). Run it after any layout change.
+- `bun scripts/capture-pill.ts [outDir]` screenshots every state of the native dictation pill (default `/private/tmp/buddymac-pill`). Rebuild the helper with `scripts/build-speech.sh` first.
 - Install: stop the running BuddyMac, move `~/Applications/BuddyMac.app` to `dist/BuddyMac.installed-previous.app`, then `ditto dist/BuddyMac.app ~/Applications/BuddyMac.app`.
 
 ## UI layout rules

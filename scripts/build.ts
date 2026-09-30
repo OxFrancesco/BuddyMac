@@ -49,7 +49,7 @@ for (const file of await readdir(join(dist, "native"))) {
   const source = join(dist, "native", file);
   if ((await stat(source)).isFile()) await copyFile(source, join(macos, file));
 }
-for (const file of ["buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-liny", "buddymac-default-browser"]) await copyFile(join(dist, file), join(macos, file));
+for (const file of ["buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-default-browser"]) await copyFile(join(dist, file), join(macos, file));
 await copyFile(join(root, "native/speech/build/buddymac-speech"), join(macos, "buddymac-speech"));
 const focusApp = join(dist, "BuddyMac Focus.app");
 const packagedFocusApp = join(stage, "Contents/Helpers/BuddyMac Focus.app");
@@ -58,6 +58,7 @@ if (existsSync(focusApp)) {
   await run(["/usr/bin/ditto", focusApp, packagedFocusApp]);
 }
 await copyFile(join(root, "node_modules/@gpuix/native-darwin-arm64/gpuix-native.darwin-arm64.node"), join(macos, "gpuix-native.node"));
+await run(["/usr/bin/strip", "-x", join(macos, "gpuix-native.node")]);
 await cp(join(root, "assets/fonts"), join(resources, "fonts"), { recursive: true });
 await cp(join(root, "assets/ducky"), join(resources, "ducky"), { recursive: true });
 await run(["/usr/bin/ditto", join(root, "native/speech/build/Frameworks/llama.framework"), framework]);
@@ -103,7 +104,7 @@ const sign = async (path: string, entitlementFile?: string) => {
 };
 await sign(framework);
 for (const file of await readdir(macos)) {
-  const permissions = file === "BuddyMac" || file === "buddymac-liny" ? entitlements : file === "buddymac-speech" ? join(root, "scripts/speech-entitlements.plist") : undefined;
+  const permissions = file === "BuddyMac" ? entitlements : file === "buddymac-speech" ? join(root, "scripts/speech-entitlements.plist") : undefined;
   await sign(join(macos, file), permissions);
 }
 await sign(stage, entitlements);

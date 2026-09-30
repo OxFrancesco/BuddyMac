@@ -6,6 +6,7 @@ import { copyText } from './platform'
 import type { CompactMode } from './panel'
 import { Button, C, display, ErrorText, Row, Text } from './ui'
 import { clock, nextPhase, phaseTitle } from './notchflow'
+import { PermissionButtons } from './talk-view'
 
 export function CompactView({ mode, onExpand }: { mode: CompactMode; onExpand: () => void }) {
   return mode === 'focus' ? <CompactFocus onExpand={onExpand} /> : <CompactTalk onExpand={onExpand} />
@@ -67,5 +68,6 @@ function CompactTalk({ onExpand }: { onExpand: () => void }) {
       {state.text ? <Button id="compact-talk-copy" onClick={() => copyText(state.text)}>Copy text</Button> : null}
     </Row>
     <ErrorText message={state.error} />
+    <PermissionButtons needs={state.needs} onError={state.setError} />
   </div>
 }

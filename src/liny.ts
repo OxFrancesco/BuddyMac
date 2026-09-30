@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { eventSchema, frameSchema, sessionsSchema, snapshotSchema, sourcesSchema, stateSchema, type LinyEvent, type LinyProvider, type LinyThinking } from '../native/liny/agent/src/buddymac-contract'
 export type { LinyState, LinySnapshot, LinySessions, LinySources, LinyEvent, LinyProvider, LinyThinking } from '../native/liny/agent/src/buddymac-contract'
 
@@ -10,12 +10,17 @@ export class LinyClient {
   private pending = new Map<number, Pending>()
   private listeners = new Set<(event: LinyEvent) => void>()
   private buffer = ''
-  constructor(private options: { executable?: string; env?: NodeJS.ProcessEnv } = {}) {}
+  constructor(private options: { command?: [string, ...string[]]; env?: NodeJS.ProcessEnv } = {}) {}
   onEvent(listener: (event: LinyEvent) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }
   private start() {
     if (this.child) return
-    const executable = this.options.executable ?? process.env.BUDDYMAC_LINY_HELPER ?? (process.execPath.includes('.app/Contents/MacOS/') ? resolve(dirname(process.execPath), 'buddymac-liny') : resolve(import.meta.dir, '../dist/buddymac-liny'))
-    const child = spawn(executable, [], { stdio: 'pipe', env: { ...process.env, ...this.options.env } })
+    const command: [string, ...string[]] = this.options.command ?? (process.env.BUDDYMAC_LINY_HELPER
+      ? [process.env.BUDDYMAC_LINY_HELPER]
+      : process.execPath.includes('.app/Contents/MacOS/')
+        ? [process.execPath, '--liny-worker']
+        : [resolve(import.meta.dir, '../dist/buddymac-liny')])
+    const [executable, ...args] = command
+    const child = spawn(executable, args, { stdio: 'pipe', env: { ...process.env, ...this.options.env } })
     this.child = child; this.buffer = ''
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {

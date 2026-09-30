@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useGpuix } from '@gpuix/react'
-import { applyDockIcons, createDockPack, dockStatus, getManaged, iconPreview, listDockApps, loadCurrentPack, loadSavedDockPack, refreshDock, relaunchApp, resetDockIcons, setCurrentPack, setManaged, type DockApp, type DockResult, type SavedDockPack } from './dock'
+import { applyDockIcons, createDockPack, dockFailureMessage, dockStatus, getManaged, iconPreview, listDockApps, loadCurrentPack, loadSavedDockPack, refreshDock, relaunchApp, resetDockIcons, setCurrentPack, setManaged, type DockApp, type DockResult, type SavedDockPack } from './dock'
 import { openSettingsPane } from './platform'
+import { DockRecovery, needsAppManagement } from './dock-recovery'
 import { tabs, useTab } from './nav'
 import { Button, C, Column, Empty, ErrorText, Field, Group, Intro, Labeled, Row, Setting, TabbedPage, Text, space } from './ui'
 
@@ -13,7 +14,26 @@ export function DockView() {
   const [selected, setSelected] = useState<string[]>([]), [error, setError] = useState(''), [notice, setNotice] = useState(''), [busy, setBusy] = useState(false)
   const [managed, setManagedState] = useState<string[]>([]), [previews, setPreviews] = useState<Record<string, string>>({})
   const { renderer } = useGpuix()
+  const retryIcons = useRef<() => Promise<void>>(async () => {})
   async function run(work: () => Promise<void>) { setBusy(true); setError(''); setNotice(''); try { await work() } catch (cause) { setError(message(cause)) } finally { setBusy(false) } }
+  async function changeIcons(action: 'apply' | 'reset', current: SavedDockPack, paths: string[]) {
+    const next = await (action === 'apply' ? applyDockIcons(current, paths) : resetDockIcons(current, paths))
+    if (action === 'reset') {
+      const restored = next.filter(result => result.applied).map(result => result.appPath)
+      const kept = managed.filter(path => !restored.includes(path))
+      if (kept.length !== managed.length) { await setManaged(current, kept); setManagedState(kept) }
+    }
+    const status = await dockStatus(current)
+    setResults(status.map(item => next.find(result => result.appPath === item.appPath && result.error) ?? item))
+    if (next.some(result => result.changed)) await refreshDock()
+    const failure = dockFailureMessage(next)
+    if (failure) throw new Error(failure)
+  }
+  function startIcons(action: 'apply' | 'reset') {
+    if (!pack) return
+    retryIcons.current = () => changeIcons(action, pack, selected)
+    void run(retryIcons.current)
+  }
   async function show(next: SavedDockPack | null) {
     setPack(next); setSelected([])
     if (!next) return
@@ -37,7 +57,7 @@ export function DockView() {
   const applicable = pack?.icons.filter(icon => icon.applyMethod === 'finder').map(icon => icon.appPath) ?? []
   const actions = <Row><Button onClick={() => void run(refresh)} disabled={busy}>Refresh</Button><Button id="dock-choose-pack" onClick={choosePack}>Choose pack</Button></Row>
   return <TabbedPage id="dock" title="Dock" items={tabs.Dock} tab={tab} onTab={setTab} actions={actions} scroll={tab !== 'Icons'}>
-    <ErrorText message={error} />
+    {needsAppManagement(error) ? <DockRecovery error={error} retry={async () => { setBusy(true); try { await retryIcons.current() } finally { setBusy(false) } }} onError={setError} dismiss={() => setError('')} /> : <ErrorText message={error} />}
     {notice ? <Text muted>{notice}</Text> : null}
     {tab === 'Icons' ? <>
       {pack ? <Row style={{ flexShrink: 0, justifyContent: 'space-between' }}>
@@ -52,13 +72,13 @@ export function DockView() {
         return <Row key={icon.appPath} style={{ flexShrink: 0, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderColor: C.line }}>
           <Button quiet disabled={!saved || external} onClick={() => setSelected(previous => previous.includes(icon.appPath) ? previous.filter(path => path !== icon.appPath) : [...previous, icon.appPath])}>{selected.includes(icon.appPath) ? '✓' : '○'}</Button>
           {saved && !previews[icon.appPath] ? <div style={{ width: 44, height: 44, flexShrink: 0 }} /> : <img src={saved ? previews[icon.appPath] : icon.iconPath} objectFit="contain" style={{ width: 44, height: 44, flexShrink: 0 }} />}
-          <Column style={{ flexGrow: 1, gap: 6 }}><Text size={14}>{icon.name}</Text><Text muted size={11}>{external && saved ? 'Set in the app\'s own settings' : status?.error ? status.error.replace(/^./, first => first.toUpperCase()) : status?.applied ? `Applied${kept ? ' · kept applied' : ''}` : 'Not applied'}</Text></Column>
+          <Column style={{ flexGrow: 1, gap: 6 }}><Text size={14}>{icon.name}</Text><Text muted size={11}>{external && saved ? 'Set in the app\'s own settings' : status?.error && needsAppManagement(status.error) ? 'App Management access needed' : status?.error ? status.error.replace(/^./, first => first.toUpperCase()) : status?.applied ? `Applied${kept ? ' · kept applied' : ''}` : 'Not applied'}</Text></Column>
           {saved && !external ? <Button quiet onClick={() => void run(async () => { await relaunchApp(icon); setNotice(`${icon.name} reopened with its current icon.`) })}>Reopen app</Button> : null}
         </Row>
       })}</div>
       <Row style={{ flexWrap: 'wrap', flexShrink: 0 }}>
-        <Button id="dock-apply" primary disabled={!pack || !selected.length || busy} onClick={() => { if (pack) void run(async () => { const next = await applyDockIcons(pack, selected); setResults(await dockStatus(pack)); if (next.some(result => result.changed)) await refreshDock() }) }}>Apply selected</Button>
-        <Button id="dock-reset" disabled={!pack || !selected.length || busy} onClick={() => { if (pack) void run(async () => { await resetDockIcons(pack, selected); if (managed.some(path => selected.includes(path))) { const kept = managed.filter(path => !selected.includes(path)); await setManaged(pack, kept); setManagedState(kept) } setResults(await dockStatus(pack)); await refreshDock() }) }}>Restore original icons</Button>
+        <Button id="dock-apply" primary disabled={!pack || !selected.length || busy} onClick={() => startIcons('apply')}>Apply selected</Button>
+        <Button id="dock-reset" disabled={!pack || !selected.length || busy} onClick={() => startIcons('reset')}>Restore original icons</Button>
         <Button id="dock-keep" disabled={!pack || !selected.length || busy} onClick={() => { if (pack) void run(async () => { const kept = [...new Set([...managed, ...selected])]; await setManaged(pack, kept); setManagedState(kept); setNotice('BuddyMac reapplies these icons every minute while it runs, for example after an app update.') }) }}>Keep selected applied</Button>
       </Row>
     </> : null}

@@ -1,5 +1,5 @@
 import {LinyClient,type LinyEvent} from '../src/liny'
-const liny=new LinyClient({executable:'/Users/francescooddo/Applications/BuddyMac.app/Contents/MacOS/buddymac-liny'})
+const liny=new LinyClient({command:['/Users/francescooddo/Applications/BuddyMac.app/Contents/MacOS/BuddyMac','--liny-worker']})
 const root=(await Bun.file('evidence/live/receiver-root.txt').text()).trim()
 const target=await Bun.file(root+'/state.json').json()
 const expected='BUDDYMAC_COMPUTER_'+Date.now()

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>BuddyMac | Install & use</title>
+  <meta name="description" content="Files, dictation, writing, focus, Dock icons and Liny in one Mac app. Install BuddyMac and get started with every tool.">
+  <link rel="icon" href="icon.png" type="image/png">
+  <link rel="preload" href="fonts/ChakraPetch-Bold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="header wrap">
+    <a class="brand" href="#main" aria-label="BuddyMac home"><img src="icon.png" width="32" height="32" alt="">BuddyMac</a>
+    <nav aria-label="Main navigation"><a href="#guide">How to use</a><a href="#install">Install <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main" class="wrap">
+    <section class="intro" aria-labelledby="title">
+      <div>
+        <h1 id="title">BuddyMac</h1>
+        <p class="lead">Files, dictation, writing, focus,<br class="desktop-break"> icons and an AI assistant.<br>One app on your Mac.</p>
+      </div>
+      <div class="intro-action">
+        <a class="button" href="#install">Install BuddyMac <span aria-hidden="true">↓</span></a>
+        <p class="requirement">macOS 26+ · Apple Silicon</p>
+      </div>
+    </section>
+
+    <figure class="app-preview">
+      <img src="focus.png" width="1864" height="1304" alt="BuddyMac's Focus view, with a task list, work timer and activity history." fetchpriority="high">
+    </figure>
+
+    <section id="install" class="section" aria-labelledby="install-title">
+      <div class="section-heading"><h2 id="install-title">Install & set up</h2></div>
+      <p class="release-note">BuddyMac is currently shared as an early build. There is no public download yet. These steps apply once you have received <strong>BuddyMac.app</strong> from Francesco.</p>
+      <ol class="setup">
+        <li><h3>Move it to Applications</h3><p>Unzip the supplied build, move BuddyMac.app to Applications, then open it. The current build is signed but not notarized.</p><p>If macOS blocks a build you trust, open System Settings → Privacy & Security and use Open Anyway.</p></li>
+        <li><h3>Connect your AI provider</h3><p>In Talk → Settings, choose Set API key and add your OpenRouter key. Write uses the same key.</p><p>For Liny, open Liny → Settings, choose a provider and press Connect. Files, Focus and Dock need no AI account. AI requests use your provider account and may incur charges.</p></li>
+        <li><h3>Allow what you use</h3><p>Open Settings → Permissions. Allow Microphone for dictation and Accessibility to insert or rewrite text in other apps.</p><p>Enable shortcuts in Talk only after turning off overlapping shortcuts in your original apps.</p></li>
+      </ol>
+      <details class="permissions">
+        <summary>Which permissions does each tool need?<span class="toggle" aria-hidden="true"></span></summary>
+        <dl class="permission-list">
+          <div><dt>Microphone</dt><dd>Talk records your voice.</dd></div>
+          <div><dt>Accessibility</dt><dd>Talk and Write insert text into other apps. Without it, the result goes to your clipboard.</dd></div>
+          <div><dt>Screen Recording</dt><dd>Optional screen context for Talk and screen capture for Liny.</dd></div>
+          <div><dt>Notifications</dt><dd>Focus alerts you when work or a break ends.</dd></div>
+          <div><dt>App Management</dt><dd>Dock changes other apps' icons.</dd></div>
+          <div><dt>Automation</dt><dd>Dock reopens apps. Switching from the original utilities can also use it to turn off their login items.</dd></div>
+        </dl>
+      </details>
+    </section>
+
+    <section id="guide" class="section guide" aria-labelledby="guide-title">
+      <div class="section-heading"><h2 id="guide-title">Use BuddyMac</h2><p>Press <kbd>⌘ K</kbd> in the app to find a tool or action.</p></div>
+      <details id="files" class="feature" open>
+        <summary><h3>Files</h3><span class="description">Keep files ready to drag into any app.</span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="feature-content">
+          <ol><li>Drop files onto the shelf, or choose Add files or Paste files.</li><li>Search and select files, then drag them into another app. You can also Open, Copy or Show in Finder.</li><li>In Files → Settings, choose a normal window or a shelf on the left or right screen edge.</li></ol>
+          <p>Pin the shelf to keep it open. Remove clears an item from the shelf; it does not delete the original file.</p>
+        </div>
+      </details>
+      <details id="talk" class="feature">
+        <summary><h3>Talk</h3><span class="description">Speak, transcribe and edit with your voice.</span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="feature-content">
+          <ol><li>Open Talk → Record. Press Record, speak, then Stop and transcribe. Import audio transcribes an existing recording.</li><li>Copy the result, or enable Paste into the active app in Settings. Use a dictation shortcut to record while working in another app.</li><li>Set shortcuts for dictation, voice editing and spoken notes in Shortcuts. Use the compact recorder or enable the dictation pill in Settings.</li></ol>
+          <dl><div><dt>Dictionary & snippets</dt><dd>Add names and specialist words to Dictionary. Use Snippets for phrases you say often.</dd></div><div><dt>Style & cleanup</dt><dd>Choose writing styles per app. Settings controls language, cleanup, memory and optional screen context. Save your changes.</dd></div><div><dt>History & retry</dt><dd>Search, copy or delete past transcripts in History. Retry a failed transcription, or cancel a recording you don't need.</dd></div></dl>
+          <p>Audio goes to OpenRouter. Optional S1-mini cleanup runs English text locally; it does not make transcription offline. Screen context sends an active-window screenshot when enabled.</p>
+        </div>
+      </details>
+      <details id="write" class="feature">
+        <summary><h3>Write</h3><span class="description">Rewrite selected text with your own instructions.</span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="feature-content">
+          <ol><li>Paste text into Rewrite, choose a profile and press Rewrite. Edit or copy the result, or use it as the next input.</li><li>In Profiles, create a rewrite instruction or choose a template. Assign a shortcut and enable it.</li><li>Select text in another app and press that profile's shortcut to rewrite it in place.</li></ol>
+          <p>Notes holds saved notes and lets you assign note shortcuts. Profiles can be edited, reordered or disabled. Choose the default writing model and enable profile and note shortcuts in Settings.</p>
+        </div>
+      </details>
+      <details id="focus" class="feature">
+        <summary><h3>Focus</h3><span class="description">Plan a task. Start a timer. Take a break.</span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="feature-content">
+          <ol><li>Add tasks in Tasks. Set a project, priority, due date and tags; search or filter to choose what to work on.</li><li>Start the timer. Pause, reset or skip a phase as needed. Settings controls work time, breaks and automatic transitions.</li><li>Open History for completed sessions and activity. Use Check-ins to record your mood and a note about your day.</li></ol>
+          <p>Compact timer floats above your work. Enable the notch panel or menu-bar timer in Settings. To share tasks, sessions and check-ins with NotchFlow, choose Share with NotchFlow. iCloud sync requires an iCloud-enabled build and the same iCloud account.</p>
+        </div>
+      </details>
+      <details id="dock" class="feature">
+        <summary><h3>Dock</h3><span class="description">Give your apps the icons you want.</span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="feature-content">
+          <ol><li>Choose pack to open an existing BuddyDock manifest, or open New pack, name it and choose PNG or JPEG artwork for each app.</li><li>In Icons, select the apps to change and press Apply selected. Reopen an app if its old icon is still showing.</li><li>Choose Keep selected applied to repair icons after updates while BuddyMac runs.</li></ol>
+          <p>Restore original icons undoes selected changes. Stop automatic repair in Settings. Use square artwork, ideally 1024 × 1024 pixels. Apps with their own icon settings must be configured there.</p>
+        </div>
+      </details>
+      <details id="liny" class="feature">
+        <summary><h3>Liny</h3><span class="description">Chat with an assistant that can use tools.</span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="feature-content">
+          <ol><li>In Settings, connect Codex with your ChatGPT account, or use your own OpenRouter or Z.AI key. Choose the model and press Use this model.</li><li>Open Chat, write your request and send it. Attach an image when useful; start a New chat for a separate task.</li><li>Resume conversations from History and manage saved context in Memory.</li></ol>
+          <p>Settings lets you import an existing profile, set an edge sidebar and record shortcuts for opening Liny or capturing a screen region. Computer actions depend on macOS permissions; some screen-capture and computer-control workflows remain limited in this build.</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="section everyday" aria-labelledby="everyday-title">
+      <h2 id="everyday-title">Keep it within reach</h2>
+      <div><p>Turn on Start at login in Settings → General if you want BuddyMac available when you sign in. Closing its window keeps it running in the menu bar. Choose Quit there to stop it.</p><p>Your original apps stay installed. Settings → Original apps manages the switch to BuddyMac. Review those choices before disabling the utilities you already use.</p></div>
+    </section>
+  </main>
+  <footer class="wrap footer"><a href="https://oddofrancesco.com">Francesco Oddo <span aria-hidden="true">↗</span></a><a href="#install">Installation guide <span aria-hidden="true">↑</span></a></footer>
+  <script src="page.js" defer></script>
+</body>
+</html>

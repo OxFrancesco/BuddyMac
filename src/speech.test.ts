@@ -339,7 +339,7 @@ describe("speech feature regression coverage", () => {
     };
     await service.importAudio(path);
     expect((await waitForFailure()).canRetry).toBe(true);
-    expect(events.some(event => event.event === "error" && event.recordingPath === path && event.message.includes("Add an OpenRouter key"))).toBe(true);
+    expect(events.some(event => event.event === "error" && event.recordingPath === path && event.message.includes("Add an OpenRouter key") && event.needs.length === 0)).toBe(true);
     expect(await readFile(path)).toEqual(wave);
     expect(await service.history()).toEqual([]);
     await service.retry();
@@ -348,6 +348,19 @@ describe("speech feature regression coverage", () => {
     await service.cancel();
     expect((await service.status()).phase).toBe("idle");
     expect(await service.history()).toEqual([]);
+  });
+
+  test("dictation pill is off until BuddyMac turns it on and previews only known phases", async () => {
+    const root = await directory();
+    const events: SpeechEvent[] = [];
+    const service = new SpeechClient({ dataDirectory: root, onEvent: event => events.push(event) });
+    clients.push(service);
+    expect(await service.setOverlay(true)).toBe(true);
+    expect(await service.setOverlay(false)).toBe(false);
+    await expect(service.previewOverlay({ phase: "listening" as never })).rejects.toThrow("Choose a dictation phase");
+    await expect(service.start()).rejects.toThrow("Add an OpenRouter key");
+    expect(events.filter(event => event.event === "phase")).toEqual([]);
+    expect((await service.status()).phase).toBe("idle");
   });
 
   test("corrupt writing data fails without replacing either active data or import snapshot", async () => {

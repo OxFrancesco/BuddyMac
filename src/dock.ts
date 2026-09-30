@@ -27,6 +27,15 @@ export interface DockResult {
   error: string | null;
 }
 
+export function dockFailureMessage(results: readonly DockResult[]): string {
+  const failure = results.find(result => result.error);
+  if (!failure?.error) return '';
+  const name = failure.appPath.split('/').at(-1)?.replace(/\.app$/, '') ?? failure.appPath;
+  return failure.error.includes('App Management')
+    ? `App Management is blocking icon changes for ${name}.`
+    : `${name}: ${failure.error}`;
+}
+
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid Dock data");
   return Object.fromEntries(Object.entries(value));

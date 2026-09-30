@@ -102,7 +102,7 @@ struct LocalStore {
     }
 }
 
-enum DictationPhase: Equatable {
+enum DictationPhase: String, Equatable {
     case idle, requestingPermission, recording, transcribing, formatting, inserting, success, failed
 
     var title: String {

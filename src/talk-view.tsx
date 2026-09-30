@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useGpuix } from '@gpuix/react'
 import { requestCompact } from './panel'
 import { setSpeechShortcuts } from './speech-shortcuts'
-import { speechHistoryDate, type DictationStyle, type SpeechHistoryEntry, type SpeechPreferences, type SpeechShortcut, type VocabularyEntry } from './speech'
+import { speechHistoryDate, type DictationStyle, type SpeechHistoryEntry, type SpeechNeed, type SpeechPreferences, type SpeechShortcut, type VocabularyEntry } from './speech'
 import { speech, useSpeech } from './speech-state'
 import { talkPrefs, useTalkPrefs } from './talk-prefs'
 import { useSticky } from './sticky'
@@ -33,6 +33,18 @@ const defaultShortcuts: SpeechPreferences['shortcuts'] = {
 }
 const label = (shortcut: SpeechShortcut) => formatShortcut(shortcut.keyCode, fromCarbon(shortcut.modifiers), shortcut.keyLabel)
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
+const needLabels: Record<SpeechNeed, string> = { screenRecording: 'Allow Screen Recording', accessibility: 'Allow Accessibility', microphone: 'Allow microphone' }
+async function allow(need: SpeechNeed) {
+  if (need === 'microphone') openSettingsPane('microphone')
+  else if (need === 'accessibility') await speech().requestAccessibility()
+  else await speech().requestScreenCapture()
+}
+
+/** The permission the last dictation was missing, offered right under its warning. */
+export function PermissionButtons({ needs, onError }: { needs: SpeechNeed[]; onError: (message: string) => void }) {
+  if (!needs.length) return null
+  return <Row style={{ flexShrink: 0 }}>{needs.map(need => <Button key={need} id={`talk-allow-${need}`} onClick={() => void allow(need).catch(cause => onError(message(cause)))}>{needLabels[need]}</Button>)}</Row>
+}
 
 export function TalkView() {
   const s = useSpeech()
@@ -51,7 +63,7 @@ export function TalkView() {
     {prefs.dirty ? <><Button id="talk-discard" onClick={() => talkPrefs.discard()}>Discard</Button><Button id="talk-save-preferences" primary disabled={prefs.saving} onClick={() => void talkPrefs.save()}>{prefs.saving ? 'Saving' : 'Save changes'}</Button></> : null}
     <Button id="talk-compact" onClick={() => requestCompact('talk')}>Compact recorder</Button>
   </Row>
-  const errors = <><ErrorText message={error || s.error} /><ErrorText message={prefs.error} /></>
+  const errors = <><ErrorText message={error || s.error} />{error ? null : <PermissionButtons needs={s.needs} onError={setError} />}<ErrorText message={prefs.error} /></>
   return <TabbedPage id="talk" title="Talk" items={tabs.Talk} tab={tab} onTab={setTab} actions={actions}>
     {errors}
     {tab === 'Record' ? <RecordTab s={s} recording={recording} busy={busy} history={history} importAudio={() => void s.run(async () => { const paths = await renderer?.promptForPaths?.({ files: true, directories: false, multiple: false }); if (paths?.[0]) await speech().importAudio(paths[0]) })} /> : null}
@@ -233,7 +245,7 @@ function SettingsTab({ draft, edit, memory, keyConfigured, localModel, screenAll
       </Setting>
     </Group>
     <Group title="Recorder">
-      <Setting label="Show the recorder while dictating from a shortcut" detail="A small panel appears at the top of the screen while you speak. Only when the BuddyMac window is closed."><Check id="talk-pill" label={layout.talkPill ? 'On' : 'Off'} checked={layout.talkPill} onChange={talkPill => void surfaces.update(current => ({ ...current, talkPill }))} /></Setting>
+      <Setting label="Show the dictation pill" detail="Appears at the bottom of the screen while you speak and while Talk transcribes."><Check id="talk-pill" label={layout.talkPill ? 'On' : 'Off'} checked={layout.talkPill} onChange={talkPill => void surfaces.update(current => ({ ...current, talkPill }))} /></Setting>
     </Group>
     <Group title="Insertion">
       <Setting label="Paste into the active app" detail="Otherwise the transcript is copied to the clipboard."><Check id="talk-auto-paste" label={draft.autoPaste ? 'On' : 'Off'} checked={draft.autoPaste} onChange={flag('autoPaste')} /></Setting>

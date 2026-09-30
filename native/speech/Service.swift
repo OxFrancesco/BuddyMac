@@ -19,6 +19,7 @@ struct Command: Decodable {
     var provider: RewriteProvider?
     var name: String?
     var instruction: String?
+    var needs: [String]?
 }
 
 @MainActor
@@ -39,14 +40,29 @@ final class SpeechService {
     private var retryFilename = "dictation.wav"
     private var shortcutsEnabled = false
     private var generation = UUID()
-    private var screenTask: Task<ScreenContext?, Never>?
+    private var screenTask: Task<ScreenContext, Error>?
     private var localNormalizer: S1MiniNormalizer?
     private var localNormalizerURL: URL?
     private var modelDownload: Task<Void, Error>?
+    private let overlay = DictationOverlay()
+    /// True from the start of a Talk dictation until it ends. Write and note phases never reach the pill.
+    private var overlaySession = false
 
     init() throws {
         storage = try SpeechStorage()
-        recorder.onLevel = { [weak self] level in self?.emit(["event": "level", "level": level]) }
+        recorder.onLevel = { [weak self] level in
+            self?.overlay.model.audioLevel = level
+            self?.emit(["event": "level", "level": level])
+        }
+        overlay.model.onStop = { [weak self] in self?.stopFromHotkey() }
+        overlay.model.onCancel = { [weak self] in try? self?.cancel() }
+        overlay.model.onAllow = { need in
+            switch need {
+            case .accessibility: AccessibilityAccess.request()
+            case .screenRecording: ScreenContextCapture.requestAccess()
+            case .microphone: NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+            }
+        }
         recorder.onError = { [weak self] error in self?.fail(error) }
         hotkey.onHoldStart = { [weak self] in self?.startFromHotkey(mode: "dictate") }
         hotkey.onHoldEnd = { [weak self] in self?.stopFromHotkey() }
@@ -80,7 +96,7 @@ final class SpeechService {
                 guard let self else { return }
                 let delivery = await self.deliver(note.content, target: destination, insert: true)
                 guard !Task.isCancelled, self.generation == generation else { return }
-                self.emit(["event": "result", "source": "note", "text": note.content, "rawText": note.content, "delivery": delivery, "warning": ""])
+                self.emit(["event": "result", "source": "note", "text": note.content, "rawText": note.content, "delivery": delivery.text, "warning": "", "needs": delivery.needs.map(\.rawValue)])
                 self.setPhase("success")
             }
         }
@@ -109,6 +125,7 @@ final class SpeechService {
         recorder.cancel()
         hotkey.stop()
         writeHotkeys.unregisterAll()
+        overlay.enabled = false
     }
 
     private func handle(_ command: Command) async {
@@ -231,6 +248,14 @@ final class SpeechService {
             case "requestScreenCapture":
                 ScreenContextCapture.requestAccess()
                 reply(command.id, ["granted": ScreenContextCapture.isAllowed])
+            case "setOverlay":
+                overlay.enabled = command.enabled == true
+                reply(command.id, ["enabled": overlay.enabled])
+            case "previewOverlay":
+                guard !busy, let phase = command.value.flatMap(DictationPhase.init(rawValue:)) else { throw SpeechFailure(message: "Choose a dictation phase to preview while idle.") }
+                let window = overlay.preview(phase, targetAppName: command.name, message: command.text ?? "",
+                                             needs: (command.needs ?? []).compactMap(OverlayNeed.init(rawValue:)))
+                reply(command.id, ["phase": phase.rawValue, "windowNumber": window])
             case "start":
                 try await start(mode: command.mode ?? "dictate", insert: command.insert ?? false)
                 reply(command.id, ["phase": phase])
@@ -244,6 +269,7 @@ final class SpeechService {
                 guard !busy, let audio = retryAudio else { throw SpeechFailure(message: "There is no failed recording to retry.") }
                 target = nil
                 shouldInsert = false
+                beginOverlay(target: nil, editing: false)
                 process(audio, filename: retryFilename)
                 reply(command.id, ["phase": phase])
             case "importAudio":
@@ -258,8 +284,11 @@ final class SpeechService {
                 target = nil
                 selectedText = nil
                 shouldInsert = false
+                screenTask?.cancel()
+                screenTask = nil
                 retryAudio = audio
                 retryFilename = url.lastPathComponent
+                beginOverlay(target: nil, editing: false)
                 process(audio, filename: retryFilename)
                 reply(command.id, ["phase": phase])
             case "rewrite", "rewriteSelection":
@@ -282,16 +311,16 @@ final class SpeechService {
                                                               model: profile.openRouterModelID ?? storage.writeModel)
                         try Task.checkCancellation()
                         guard generation == id else { return }
-                        let delivery: String
+                        let delivery: Delivery
                         if destination != nil && storage.writing.settings.outputMode == .copyToClipboard {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(result, forType: .string)
-                            delivery = "copied"
+                            delivery = Delivery(text: "copied")
                         } else { delivery = await deliver(result, target: destination, insert: destination != nil) }
                         guard generation == id else { return }
-                        emit(["event": "result", "source": "write", "text": result, "rawText": source, "delivery": delivery, "warning": ""])
+                        emit(["event": "result", "source": "write", "text": result, "rawText": source, "delivery": delivery.text, "warning": "", "needs": delivery.needs.map(\.rawValue)])
                         setPhase("success")
-                        reply(command.id, ["text": result, "delivery": delivery])
+                        reply(command.id, ["text": result, "delivery": delivery.text])
                     } catch {
                         if generation == id { fail(error) }
                         reject(command.id, error)
@@ -426,14 +455,19 @@ final class SpeechService {
         target = destination
         screenTask?.cancel()
         screenTask = nil
-        if storage.data.preferences.screenContextEnabled, let destination, !destination.isSecure {
-            screenTask = Task { try? await ScreenContextCapture.capture(processID: destination.processID) }
+        // Only voice edits and cloud cleanup read the screenshot. Local S1-mini and verbatim dictation never capture it.
+        let preferences = storage.data.preferences
+        let style = preferences.style(for: destination?.bundleIdentifier)
+        let usesScreen = selection != nil || (preferences.cleanupEnabled && style != .verbatim && !preferences.localCleanupEnabled)
+        if preferences.screenContextEnabled, usesScreen, let destination, !destination.isSecure {
+            screenTask = Task { try await ScreenContextCapture.capture(processID: destination.processID) }
         }
         selectedText = selection
         shouldInsert = insert
         retryAudio = nil
         generation = UUID()
         let id = generation
+        beginOverlay(target: destination, editing: selection != nil)
         setPhase("requestingPermission")
         do {
             try await recorder.start()
@@ -452,7 +486,8 @@ final class SpeechService {
         }
     }
 
-    private func stop() throws {
+    /// A shortcut tap too short to hold any speech cancels quietly, as BuddyTalk did, instead of flashing an error.
+    private func stop(quietWhenShort: Bool = false) throws {
         guard phase == "recording" else { throw SpeechFailure(message: "There is no active recording.") }
         deadline?.cancel()
         do {
@@ -460,6 +495,8 @@ final class SpeechService {
             retryAudio = audio
             retryFilename = "dictation.wav"
             process(audio, filename: retryFilename)
+        } catch AudioRecordingError.tooShort where quietWhenShort {
+            try cancel()
         } catch { fail(error); throw error }
     }
 
@@ -497,13 +534,22 @@ final class SpeechService {
                 guard generation == id else { return }
                 var output = response.text
                 var warnings: [String] = []
+                var needs: [OverlayNeed] = []
                 var memory: String?
                 if preferences.memoryEnabled {
                     do { memory = try MemoryFile(url: storage.store.url.deletingLastPathComponent().appendingPathComponent("memory.md")).read() }
                     catch { warnings.append("Memory could not be read.") }
                 }
-                let screen = await screenTask?.value
-                if preferences.screenContextEnabled && screen == nil { warnings.append("Screen context was unavailable.") }
+                var screen: ScreenContext?
+                if let screenTask {
+                    do { screen = try await screenTask.value }
+                    catch ScreenContextCapture.CaptureError.permission {
+                        needs.append(.screenRecording)
+                        warnings.append("Screen context needs Screen Recording permission.")
+                    }
+                    catch is CancellationError {}
+                    catch { warnings.append("Screen context was unavailable. " + error.localizedDescription) }
+                }
                 try Task.checkCancellation()
                 if let selection {
                     setPhase("formatting")
@@ -547,7 +593,15 @@ final class SpeechService {
                 retryAudio = nil
                 screenTask = nil
                 if shortcutsEnabled { hotkey.setCancellationEnabled(false) }
-                emit(["event": "result", "source": "talk", "text": output, "rawText": response.text, "delivery": delivery, "warning": warnings.joined(separator: " ")])
+                needs = delivery.needs + needs
+                emit(["event": "result", "source": "talk", "text": output, "rawText": response.text, "delivery": delivery.text,
+                      "warning": warnings.joined(separator: " "), "needs": needs.map(\.rawValue)])
+                overlay.model.needs = needs
+                overlay.model.message = switch delivery.text {
+                case "inserted": "Inserted into \(destination?.appName ?? "the app")."
+                case "ready", "cancelled": ""
+                default: delivery.text
+                }
                 setPhase("success")
                 if preferences.playSounds { NSSound(named: "Pop")?.play() }
             } catch {
@@ -557,13 +611,18 @@ final class SpeechService {
         }
     }
 
-    private func deliver(_ text: String, target: InsertionTarget?, insert: Bool) async -> String {
-        guard insert, let target else { return "ready" }
+    private struct Delivery {
+        var text: String
+        var needs: [OverlayNeed] = []
+    }
+
+    private func deliver(_ text: String, target: InsertionTarget?, insert: Bool) async -> Delivery {
+        guard insert, let target else { return Delivery(text: "ready") }
         setPhase("inserting")
         switch await insertion.insert(text, into: target, restoreClipboard: storage.data.preferences.restoreClipboard) {
-        case .inserted: return "inserted"
-        case .copied(let reason, _): return reason
-        case .cancelled: return "cancelled"
+        case .inserted: return Delivery(text: "inserted")
+        case .copied(let reason, let needsAccessibility): return Delivery(text: reason, needs: needsAccessibility ? [.accessibility] : [])
+        case .cancelled: return Delivery(text: "cancelled")
         }
     }
 
@@ -571,9 +630,18 @@ final class SpeechService {
         guard !busy else { return }
         Task { do { try await start(mode: mode, insert: true) } catch is CancellationError {} catch { fail(error) } }
     }
+    /// `stop` reports its own failures.
     private func stopFromHotkey() {
         if phase == "requestingPermission" { try? cancel() }
-        else if phase == "recording" { do { try stop() } catch { fail(error) } }
+        else if phase == "recording" { try? stop(quietWhenShort: true) }
+    }
+
+    private func beginOverlay(target: InsertionTarget?, editing: Bool) {
+        overlaySession = true
+        let shortcuts = storage.data.preferences.shortcuts
+        overlay.begin(targetAppName: target?.appName, editing: editing,
+                      finishShortcut: shortcutsEnabled ? shortcuts.toggle.displayName : "",
+                      cancelShortcut: shortcutsEnabled ? shortcuts.cancel.displayName : "")
     }
 
     private func fail(_ error: Error) {
@@ -581,11 +649,22 @@ final class SpeechService {
         deadline?.cancel()
         recorder.cancel()
         if shortcutsEnabled { hotkey.setCancellationEnabled(false) }
+        let needs: [OverlayNeed] = (error as? AudioRecordingError) == .permissionDenied ? [.microphone] : []
+        if overlaySession {
+            overlay.model.message = error.localizedDescription
+            overlay.model.needs = needs
+        }
         setPhase("failed")
-        emit(["event": "error", "message": error.localizedDescription,
+        emit(["event": "error", "message": error.localizedDescription, "needs": needs.map(\.rawValue),
               "recordingPath": retryAudio?.fileURL?.path ?? recorder.lastRecordingURL?.path ?? ""])
     }
-    private func setPhase(_ value: String) { phase = value; emit(["event": "phase", "phase": value]) }
+    private func setPhase(_ value: String) {
+        phase = value
+        emit(["event": "phase", "phase": value])
+        guard overlaySession, let dictation = DictationPhase(rawValue: value) else { return }
+        overlay.show(dictation)
+        if dictation == .idle || dictation == .success || dictation == .failed { overlaySession = false }
+    }
     private func reply(_ id: Int, _ value: Any) { if id >= 0 { emit(["id": id, "ok": true, "result": value]) } }
     private func reject(_ id: Int, _ error: Error) {
         if id >= 0 { emit(["id": id, "ok": false, "error": error.localizedDescription]) }

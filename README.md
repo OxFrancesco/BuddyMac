@@ -19,7 +19,11 @@ bun run typecheck
 bun run test
 bun run verify
 BUDDYMAC_VERIFY_APP="$PWD/dist/BuddyMac.app/Contents/MacOS/BuddyMac" bun run verify
+bun scripts/verify-package.ts
+bun scripts/app-size.ts
 ```
+
+The packaged UI and Liny agent share one Bun executable. Liny still runs in its own process using `BuddyMac --liny-worker`. The GPUix library has local symbols stripped before signing. `verify-package.ts` checks the packaged native loader, an isolated synthetic Liny reply and session persistence across restart with no external Bun on PATH. `app-size.ts` measures file contents without counting framework symlinks twice.
 
 `verify` drives the native UI using isolated fixture stores and records `evidence/buddymac-walkthrough.mp4`. It does not record microphone audio, make model requests, or alter installed app icons. `scripts/verify-live-liny.ts` is a separate opt-in provider test; it imports the inspected source profile and sends a synthetic prompt with tools disabled.
 

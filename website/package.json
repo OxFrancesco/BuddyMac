@@ -1,0 +1,10 @@
+{
+  "name": "buddymac-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build.mjs",
+    "dev": "bun serve.mjs",
+    "deploy": "bun run build && bunx wrangler@4.144.0 deploy --config wrangler.jsonc"
+  }
+}

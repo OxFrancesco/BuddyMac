@@ -11,16 +11,17 @@ import { TalkView } from './talk-view'
 import { WriteView } from './write-view'
 import { DockView } from './dock-view'
 import { SettingsView } from './settings-view'
-import { closeSpeech, onSpeechEvent, speech } from './speech-state'
+import { closeSpeech, speech } from './speech-state'
 import { restoreSpeechShortcuts } from './speech-shortcuts'
 import { FocusView } from './focus-view'
 import { focusService, startFocusService, stopFocusService } from './focus-state'
 import { focus } from './focus'
 import { FocusPanel, clock, notchPin, phaseTitle } from './notchflow'
-import { C, display, space, Text, ErrorText } from './ui'
+import { C, display, space, Text, ErrorText, Button } from './ui'
 import { hideWindow, windowKey, initializePlatform, installMenu, keepRunning, nextPlatformAction, pointerState, registerHotkeys, setStatusTitle, windowVisible, type PointerState } from './platform'
 import { removeFiles } from './files'
-import { reapplyManaged } from './dock'
+import { dockFailureMessage, reapplyManaged, refreshDock } from './dock'
+import { DockRecovery, needsAppManagement } from './dock-recovery'
 import { configureEdge, getEdgeState, loadEdgeSettings, setEdgeFilesActive } from './edge'
 import { isSection, nav, sections, useNav, type Section } from './nav'
 import { Palette, paletteKey } from './palette'
@@ -163,8 +164,7 @@ function App() {
     if (process.env.GPUIX_BACKGROUND !== '1') { installMenu(); keepRunning() }
     void loadEdgeSettings().then(configureEdge).catch(report)
     if (process.argv.includes('--takeover')) void takeoverFromLaunch().then(async problems => { if (problems.length) report(problems.join(' ')); await loadEdgeSettings().then(configureEdge); await surfaces.load() }).catch(report)
-    let linySince = 0, linyArmed = true, closeSince = 0, notchSince = 0, leaveSince = 0, pillUntil = 0, phase = 'idle', lastPhase = 'idle', talkFromShortcut = false
-    const stopListening = onSpeechEvent(event => { if (event.event === 'phase') phase = event.phase })
+    let linySince = 0, linyArmed = true, closeSince = 0, notchSince = 0, leaveSince = 0
     if (process.env.GPUIX_BACKGROUND !== '1') try { speech() } catch (cause) { report(cause) }
     const timer = setInterval(() => {
       const action = nextPlatformAction()
@@ -212,19 +212,15 @@ function App() {
         if (!outside) notchArmed = true
         if (outside && notchArmed && !notchPin.pinned) { if (!leaveSince) leaveSince = now; else if (now - leaveSince >= 150) { leaveSince = 0; dismissFloating() } } else leaveSince = 0
       }
-      if (phase === 'recording' && lastPhase !== 'recording' && current === 'hidden' && settings.talkPill) { pillUntil = 0; talkFromShortcut = true; change('talk') }
-      if (current === 'talk' && talkFromShortcut && ['idle', 'success', 'failed'].includes(phase)) {
-        if (!pillUntil) pillUntil = now + 1500
-        else if (now >= pillUntil) { pillUntil = 0; talkFromShortcut = false; change('hidden') }
-      }
-      if (current !== 'talk') talkFromShortcut = false
-      lastPhase = phase
     }, 100)
     // Apps owned by root (for example Tailscale) can't take a custom icon without sudo; that is shown in Dock, not every minute here.
-    const maintain = () => void reapplyManaged().then(results => { const failure = results.find(result => result.error && !/owned by/i.test(result.error)); if (failure?.error) report(failure.error) }).catch(report)
+    const maintain = () => void reapplyManaged().then(results => { const failure = dockFailureMessage(results.filter(result => !/owned by/i.test(result.error ?? ''))); if (failure) report(failure) }).catch(report)
     const dockTimer = setInterval(maintain, 60_000)
-    return () => { stopFocusService(); stopListening(); clearInterval(timer); clearInterval(dockTimer) }
+    return () => { stopFocusService(); clearInterval(timer); clearInterval(dockTimer) }
   }, [renderer])
+
+  // The speech helper draws the dictation pill itself, so it follows the recorder even with the window closed.
+  useEffect(() => { if (process.env.GPUIX_BACKGROUND !== '1') void Promise.resolve().then(() => speech().setOverlay(layout.talkPill)).catch(report) }, [layout.talkPill])
 
   const floating = surface === 'focus' || surface === 'talk' || surface === 'liny' || surface === 'files' || surface === 'notch'
   return <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', backgroundColor: C.bg }}>
@@ -237,7 +233,14 @@ function App() {
       {surface === 'notch' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><FocusPanel width={size.width} onExpand={() => openMain('Focus')} onSettings={() => { nav.go('Focus', 'Settings'); change('main') }} /></div> : null}
       {surface === 'files' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><FilesView shelf /></div> : null}
       {paletteOpen && !floating ? <Palette /> : null}
-      {error ? <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', paddingTop: 12, paddingBottom: 12, paddingLeft: floating ? 16 : space.page, paddingRight: floating ? 16 : space.page, borderTopWidth: 1, borderColor: C.line, backgroundColor: C.bg }} onClick={() => setError('')}><ErrorText message={error} /></div> : null}
+      {error ? <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', paddingTop: 12, paddingBottom: 12, paddingLeft: floating ? 16 : space.page, paddingRight: floating ? 16 : space.page, borderTopWidth: 1, borderColor: C.line, backgroundColor: C.bg }}>
+        {needsAppManagement(error) && floating ? <Button id="dock-permission-expand" onClick={() => openMain('Dock')}>Fix Dock icons</Button> : needsAppManagement(error) ? <DockRecovery error={error} onError={setError} dismiss={() => setError('')} retry={async () => {
+          const results = await reapplyManaged()
+          if (results.some(result => result.changed)) await refreshDock()
+          const failure = dockFailureMessage(results.filter(result => !/owned by/i.test(result.error ?? '')))
+          if (failure) throw new Error(failure)
+        }} /> : <div onClick={() => setError('')}><ErrorText message={error} /></div>}
+      </div> : null}
     </div>
   </div>
 }

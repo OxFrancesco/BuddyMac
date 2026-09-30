@@ -55,11 +55,13 @@ export interface SpeechHistoryEntry {
   appName: string;
   duration: number;
 }
+/** A permission the last operation was missing. The UI offers a button for each. */
+export type SpeechNeed = "accessibility" | "screenRecording" | "microphone";
 export type SpeechEvent =
   | { event: "phase"; phase: SpeechPhase }
   | { event: "level"; level: number }
-  | { event: "result"; source: "talk" | "write" | "note"; text: string; rawText: string; delivery: string; warning: string }
-  | { event: "error"; message: string; recordingPath: string };
+  | { event: "result"; source: "talk" | "write" | "note"; text: string; rawText: string; delivery: string; warning: string; needs: SpeechNeed[] }
+  | { event: "error"; message: string; recordingPath: string; needs: SpeechNeed[] };
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid speech service response.");
@@ -155,12 +157,16 @@ function parseHistory(value: unknown): SpeechHistoryEntry {
 function parseSource(value: unknown): "talk" | "write" | "note" {
   switch (value) { case "talk": case "write": case "note": return value; default: throw new Error("Invalid speech result source."); }
 }
+function parseNeeds(value: unknown): SpeechNeed[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((need): need is SpeechNeed => need === "accessibility" || need === "screenRecording" || need === "microphone");
+}
 function parseEvent(item: Record<string, unknown>): SpeechEvent {
   switch (item.event) {
     case "phase": return { event: "phase", phase: parsePhase(item.phase) };
     case "level": return { event: "level", level: number(item.level) };
-    case "result": return { event: "result", source: parseSource(item.source), text: string(item.text), rawText: string(item.rawText), delivery: string(item.delivery), warning: string(item.warning) };
-    case "error": return { event: "error", message: string(item.message), recordingPath: typeof item.recordingPath === "string" ? item.recordingPath : "" };
+    case "result": return { event: "result", source: parseSource(item.source), text: string(item.text), rawText: string(item.rawText), delivery: string(item.delivery), warning: string(item.warning), needs: parseNeeds(item.needs) };
+    case "error": return { event: "error", message: string(item.message), recordingPath: typeof item.recordingPath === "string" ? item.recordingPath : "", needs: parseNeeds(item.needs) };
     default: throw new Error("Unknown speech service event.");
   }
 }
@@ -218,6 +224,12 @@ export class SpeechClient {
   async downloadLocalCleanup(): Promise<void> { await this.request("downloadLocalCleanup"); }
   async cancelLocalDownload(): Promise<void> { await this.request("cancelLocalDownload"); }
   async requestScreenCapture(): Promise<boolean> { return boolean(record(await this.request("requestScreenCapture")).granted); }
+  /** Turns the floating dictation pill on or off. It starts off, so isolated helpers never show it. */
+  async setOverlay(enabled: boolean): Promise<boolean> { return boolean(record(await this.request("setOverlay", { enabled })).enabled); }
+  /** Shows the pill in one phase with synthetic values, for screenshots. `idle` hides it. Returns the window number for `screencapture -l`. */
+  async previewOverlay(options: { phase: SpeechPhase; appName?: string; message?: string; needs?: SpeechNeed[] }): Promise<number> {
+    return number(record(await this.request("previewOverlay", { value: options.phase, name: options.appName, text: options.message, needs: options.needs })).windowNumber);
+  }
   async start(options: { mode?: "dictate" | "editSelection"; insert?: boolean } = {}): Promise<void> { await this.request("start", { mode: options.mode ?? "dictate", insert: options.insert ?? false }); }
   async stop(): Promise<void> { await this.request("stop"); }
   async cancel(): Promise<void> { await this.request("cancel"); }
