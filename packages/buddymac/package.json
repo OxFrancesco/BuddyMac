@@ -1,6 +1,6 @@
 {
   "name": "buddymac",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Download and install BuddyMac for Apple Silicon Macs",
   "type": "module",
   "bin": { "buddymac": "cli.mjs" },

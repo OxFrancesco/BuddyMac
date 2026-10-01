@@ -12,9 +12,9 @@ Install the app with the [npm package](https://www.npmjs.com/package/buddymac):
 npx buddymac
 ```
 
-It downloads the signed Apple Silicon app to `~/Applications`, verifies the checksum and signing identity, and opens it. Requires macOS 26+ and Node.js 20+. Existing apps are not overwritten. Use `--no-open` to install without launching, or `--destination <folder>` to choose another location. The early build is not notarized; macOS may require **Open Anyway** in System Settings → Privacy & Security.
+It downloads the signed Apple Silicon app to `~/Applications`, verifies the checksum and signing identity, and opens it. Requires macOS 26+ and Node.js 20+. Existing apps are not overwritten. Use `--no-open` to install without launching, or `--destination <folder>` to choose another location. The release is notarized by Apple and checked by Gatekeeper before installation.
 
-To publish an installer update, upload the matching app ZIP to a GitHub release, update `packages/buddymac/release.json` with its version, download URL and SHA-256, bump the package version, then run `bun publish --cwd packages/buddymac --access public`. Keep the release asset immutable because the installer pins its checksum.
+To publish an installer update, run `zsh scripts/notarize.sh` after building. It submits to Apple, staples the ticket, checks Gatekeeper, and creates `dist/BuddyMac-darwin-arm64.zip`. Upload that ZIP to a GitHub release, update `packages/buddymac/release.json` with its version, download URL and SHA-256, bump the package version, then run `bun publish --cwd packages/buddymac --access public`. Keep the release asset immutable because the installer pins its checksum.
 
 ```sh
 bun install
@@ -22,7 +22,7 @@ bun run build
 open dist/BuddyMac.app
 ```
 
-The build needs Apple Silicon macOS, Xcode command-line tools, the configured Francesco Oddo Developer ID identity, the vendored OCU app, and BuddyTalk's llama framework for the initial build. The produced app bundles its runtime, fonts, native helpers, agent engine and framework. It runs without the original utility apps.
+The build needs Apple Silicon macOS, Xcode command-line tools, the configured Francesco Oddo Developer ID identity, a NotchFlow Developer ID provisioning profile at `dist/signing/focus.provisionprofile` or `BUDDYMAC_FOCUS_PROFILE`, the vendored OCU app, and BuddyTalk's llama framework for the initial build. The produced app bundles its runtime, fonts, native helpers, agent engine and framework. It runs without the original utility apps.
 
 ```sh
 bun run typecheck
@@ -49,4 +49,4 @@ New installations start empty. BuddyMac does not automatically import settings, 
 - Liny: the active personal profile was copied to BuddyMac. Provider login, conversations, and new writes stay in the copied profile. Original data is unchanged.
 - Start at login is opt-in. Closing the window keeps the menu-bar app running; Quit is in the menu-bar menu.
 
-Data lives under `~/Library/Application Support/BuddyMac`. Existing utilities and startup settings remain intact. [Workflow coverage](docs/parity.md) lists remaining feature and verification gaps. This is a locally signed build, not a notarized public release.
+Data lives under `~/Library/Application Support/BuddyMac`. Existing utilities and startup settings remain intact. [Workflow coverage](docs/parity.md) lists remaining feature and verification gaps. Public releases are Developer ID signed and notarized.

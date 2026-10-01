@@ -13,7 +13,7 @@ const identityName = "Developer ID Application: Francesco Oddo (G2442WAF29)";
 const entitlements = join(root, "scripts/app-entitlements.plist");
 
 async function run(args: string[], capture = false): Promise<string> {
-  const child = Bun.spawn(args, { cwd: root, stdin: "ignore", stdout: capture ? "pipe" : "inherit", stderr: "inherit" });
+  const child = Bun.spawn(args, { cwd: root, stdin: "ignore", stdout: capture ? "pipe" : "inherit", stderr: "inherit", env: { ...process.env } });
   const output = capture ? await new Response(child.stdout).text() : "";
   if (await child.exited !== 0) throw new Error(`Build command failed: ${args[0]}`);
   return output;
@@ -86,8 +86,8 @@ await writeFile(join(stage, "Contents/Info.plist"), `<?xml version="1.0" encodin
 <key>CFBundleExecutable</key><string>BuddyMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-<key>CFBundleShortVersionString</key><string>0.1.2</string>
-<key>CFBundleVersion</key><string>3</string>
+<key>CFBundleShortVersionString</key><string>0.1.3</string>
+<key>CFBundleVersion</key><string>4</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>BuddyMac records your voice when you start dictation.</string>
@@ -98,7 +98,7 @@ ${existsSync(icon) ? "<key>CFBundleIconFile</key><string>AppIcon</string>" : ""}
 `);
 
 const sign = async (path: string, entitlementFile?: string) => {
-  const args = ["/usr/bin/codesign", "--force", "--sign", identity, "--options", "runtime", "--timestamp=none"];
+  const args = ["/usr/bin/codesign", "--force", "--sign", identity, "--options", "runtime", "--timestamp"];
   if (entitlementFile) args.push("--entitlements", entitlementFile);
   await run([...args, path]);
 };
@@ -107,6 +107,7 @@ for (const file of await readdir(macos)) {
   const permissions = file === "BuddyMac" ? entitlements : file === "buddymac-speech" ? join(root, "scripts/speech-entitlements.plist") : undefined;
   await sign(join(macos, file), permissions);
 }
+await sign(packagedOCU);
 await sign(stage, entitlements);
 await run(["/usr/bin/codesign", "--verify", "--deep", "--strict", stage]);
 await run(["/usr/bin/codesign", "--verify", "--strict", packagedOCU]);

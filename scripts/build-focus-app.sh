@@ -1,18 +1,12 @@
 #!/bin/zsh
-# Wraps the Focus helper in an app bundle that carries NotchFlow's iCloud entitlement, so BuddyMac syncs
-# the same CloudKit container as NotchFlow and its phone app. Without NotchFlow's provisioning profile the
-# helper still runs, just without iCloud.
+# Distribute the Focus helper with the existing NotchFlow CloudKit container.
 set -euo pipefail
 cd "${0:A:h}/.."
 app="dist/BuddyMac Focus.app"
 rm -rf "$app"
-profile="${BUDDYMAC_FOCUS_PROFILE:-}"
-for candidate in "$HOME/Applications/NotchFlow.app/Contents/embedded.provisionprofile" "/Applications/NotchFlow.app/Contents/embedded.provisionprofile"; do
-  [[ -z "$profile" && -f "$candidate" ]] && profile="$candidate"
-done
-if [[ -z "$profile" ]]; then echo "No NotchFlow provisioning profile found; Focus will run without iCloud." >&2; exit 0; fi
-identity=$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development: Francesco Oddo/ {print $2; exit}')
-if [[ -z "$identity" ]]; then echo "No Apple Development identity; Focus will run without iCloud." >&2; exit 0; fi
+profile="${BUDDYMAC_FOCUS_PROFILE:-dist/signing/focus.provisionprofile}"
+[[ -f "$profile" ]] || { echo "Download a Developer ID profile for NotchFlow to $profile, or set BUDDYMAC_FOCUS_PROFILE." >&2; exit 1; }
+identity="Developer ID Application: Francesco Oddo (G2442WAF29)"
 mkdir -p "$app/Contents/MacOS"
 cp dist/buddymac-focus "$app/Contents/MacOS/buddymac-focus"
 cp "$profile" "$app/Contents/embedded.provisionprofile"
@@ -33,7 +27,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 printf 'APPL????' > "$app/Contents/PkgInfo"
-codesign --force --sign "$identity" --entitlements native/focus/Focus.entitlements --timestamp=none "$app"
+codesign --force --sign "$identity" --options runtime --entitlements native/focus/Focus.entitlements --timestamp "$app"
 codesign --verify --strict "$app"
 probe=$(mktemp -d)
 ready=$(print '' | BUDDYMAC_FOCUS_HOME="$probe" "$app/Contents/MacOS/buddymac-focus" serve | head -1 || true)
