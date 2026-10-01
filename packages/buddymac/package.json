@@ -1,13 +1,25 @@
 {
   "name": "buddymac",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Download and install BuddyMac for Apple Silicon Macs",
   "type": "module",
-  "bin": { "buddymac": "cli.mjs" },
-  "files": ["cli.mjs", "release.json", "README.md"],
-  "engines": { "node": ">=20" },
-  "os": ["darwin"],
-  "cpu": ["arm64"],
+  "bin": {
+    "buddymac": "cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "release.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/OxFrancesco/BuddyMac.git",
@@ -16,5 +28,7 @@
   "homepage": "https://github.com/OxFrancesco/BuddyMac",
   "author": "Francesco Oddo",
   "license": "UNLICENSED",
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  }
 }

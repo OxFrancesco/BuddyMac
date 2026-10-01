@@ -4,11 +4,12 @@ import { createWriteStream } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { Readable, Transform } from 'node:stream';
+import { spawn, spawnSync } from 'node:child_process';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 const release = JSON.parse(await readFile(new URL('./release.json', import.meta.url), 'utf8'));
+const { version: installerVersion } = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8'));
 const args = process.argv.slice(2);
 const help = `Usage: npx buddymac [--destination <folder>] [--no-open]
 
@@ -19,7 +20,7 @@ The download is signed and notarized by Apple. macOS download protection stays e
 
   --destination <folder>  Install in a different folder
   --no-open               Install without opening the app
-  --version               Print the bundled release version
+  --version               Print the installer version
   --help                  Show this help
 `;
 
@@ -37,7 +38,7 @@ async function install() {
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--help': case '-h': process.stdout.write(help); return;
-      case '--version': process.stdout.write(`${release.version}\n`); return;
+      case '--version': process.stdout.write(`${installerVersion}\n`); return;
       case '--no-open': open = false; break;
       case '--destination':
         if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error('--destination requires a folder.');
@@ -65,12 +66,20 @@ async function install() {
       if (error.code !== 'ENOENT') throw error;
     }
     stage = await mkdtemp(join(destination, '.buddymac-'));
-    const archive = join(stage, 'BuddyMac.zip');
+    const archive = join(stage, 'BuddyMac.tar.xz');
     process.stdout.write(`Downloading BuddyMac ${release.version}…\n`);
     const downloadStarted = performance.now();
-    const response = await fetch(release.url, { signal: AbortSignal.timeout(300_000) });
-    if (!response.ok || !response.body) throw new Error(`Download failed: HTTP ${response.status}. ${release.url}`);
-    const total = Number(response.headers.get('content-length'));
+    const download = spawn('/usr/bin/curl', [
+      '--disable', '--fail', '--location', '--http2', '--proto', '=https', '--proto-redir', '=https',
+      '--silent', '--show-error', '--connect-timeout', '20', '--max-time', '300', release.url,
+    ], { env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let downloadError = '';
+    download.stderr.on('data', chunk => { downloadError = (downloadError + chunk.toString()).slice(-4096); });
+    const finished = new Promise((resolve, reject) => {
+      download.once('error', reject);
+      download.once('close', code => code === 0 ? resolve() : reject(new Error(downloadError.trim() || `Download failed: curl exited with ${code}.`)));
+    });
+    const total = release.bytes;
     let received = 0;
     const hash = createHash('sha256');
     const meter = new Transform({ transform(chunk, encoding, done) {
@@ -87,15 +96,17 @@ async function install() {
     };
     const timer = setInterval(progress, process.stdout.isTTY ? 250 : 5000);
     try {
-      await pipeline(Readable.fromWeb(response.body), meter, createWriteStream(archive, { flags: 'wx' }));
+      await Promise.all([finished, pipeline(download.stdout, meter, createWriteStream(archive, { flags: 'wx' }))]);
     } finally {
+      if (download.exitCode === null) download.kill();
+      await finished.catch(() => {});
       clearInterval(timer);
       if (process.stdout.isTTY) process.stdout.write('\r\x1b[2K');
     }
     if (hash.digest('hex') !== release.sha256) throw new Error('Download checksum mismatch. No app was installed.');
     process.stdout.write(`Download verified in ${((performance.now() - downloadStarted) / 1000).toFixed(1)}s. Unpacking…\n`);
     const unpackStarted = performance.now();
-    run('/usr/bin/ditto', ['-x', '-k', archive, stage]);
+    run('/usr/bin/tar', ['-xJf', archive, '-C', stage]);
     const app = join(stage, 'BuddyMac.app');
     process.stdout.write(`Unpacked in ${((performance.now() - unpackStarted) / 1000).toFixed(1)}s. Checking Apple signature and notarization…\n`);
     const verificationStarted = performance.now();

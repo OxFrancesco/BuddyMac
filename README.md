@@ -14,7 +14,7 @@ npx buddymac
 
 It downloads the signed Apple Silicon app to `~/Applications`, verifies the checksum and signing identity, and opens it. Requires macOS 26+ and Node.js 20+. Existing apps are not overwritten. Use `--no-open` to install without launching, or `--destination <folder>` to choose another location. The release is notarized by Apple and checked by Gatekeeper before installation.
 
-To publish an installer update, run `zsh scripts/notarize.sh` after building. It submits to Apple, staples the ticket, checks Gatekeeper, and creates `dist/BuddyMac-darwin-arm64.zip`. Upload that ZIP to a GitHub release, update `packages/buddymac/release.json` with its version, download URL and SHA-256, bump the package version, then run `bun publish --cwd packages/buddymac --access public`. Keep the release asset immutable because the installer pins its checksum.
+To publish an installer update, run `zsh scripts/notarize.sh` after building. It submits to Apple, staples the ticket, checks Gatekeeper, and creates a ZIP for direct downloads plus a smaller `dist/BuddyMac-darwin-arm64.tar.xz` for the installer. Upload both to a GitHub release, update `packages/buddymac/release.json` with the app version, tar.xz download URL, SHA-256 and byte size, bump the package version, then run `bun publish --cwd packages/buddymac --access public`. Keep the release asset immutable because the installer pins its checksum. Installer versions can advance independently of the app version. Run `node scripts/verify-installer.mjs <version>` for an empty-cache public npm install, or append a packed `.tgz` path to verify a candidate before publishing.
 
 ```sh
 bun install

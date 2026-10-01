@@ -10,4 +10,5 @@ xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 spctl --assess --type execute --verbose=4 "$app"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
-shasum -a 256 "$archive"
+tar -cJf "$PWD/dist/BuddyMac-darwin-arm64.tar.xz" -C "$PWD/dist" BuddyMac.app
+shasum -a 256 "$archive" "$PWD/dist/BuddyMac-darwin-arm64.tar.xz"
