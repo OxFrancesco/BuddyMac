@@ -6,6 +6,16 @@ The interface follows [Francesco's design guidelines](https://oddofrancesco.com/
 
 ## Run and build
 
+The npm installer lives in [`packages/buddymac`](packages/buddymac). Once published:
+
+```sh
+npx buddymac
+```
+
+It downloads the signed Apple Silicon app to `~/Applications`, verifies the checksum and signing identity, and opens it. Requires macOS 26+ and Node.js 20+. Existing apps are not overwritten. Use `--no-open` to install without launching, or `--destination <folder>` to choose another location. The early build is not notarized; macOS may require **Open Anyway** in System Settings → Privacy & Security.
+
+To publish an installer update, upload the matching app ZIP to a GitHub release, update `packages/buddymac/release.json` with its version, download URL and SHA-256, bump the package version, then run `bun publish --cwd packages/buddymac --access public`. Keep the release asset immutable because the installer pins its checksum.
+
 ```sh
 bun install
 bun run build
