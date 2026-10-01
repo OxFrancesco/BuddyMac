@@ -37,6 +37,7 @@ static BOOL completedExternalDrop(NSDragOperation operation, NSPoint point, NSRe
 @end
 static BuddyMacPlatform *platform;
 static BOOL recordingShortcut;
+static BOOL recordingFn;
 
 static NSString *keyLabel(UInt16 keyCode) {
     NSDictionary<NSNumber *, NSString *> *named = @{@(kVK_Return): @"Return", @(kVK_Tab): @"Tab", @(kVK_Space): @"Space", @(kVK_Delete): @"Delete",
@@ -84,7 +85,15 @@ static OSStatus hotkeyPressed(EventHandlerCallRef next, EventRef event, void *co
 void buddymac_init(const char *fontDirectory) {
     actions=[NSMutableArray new]; platform=[BuddyMacPlatform new];
     if (eventMonitor) [NSEvent removeMonitor:eventMonitor];
-    eventMonitor=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp | NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
+    eventMonitor=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp | NSEventMaskKeyDown | NSEventMaskFlagsChanged handler:^NSEvent *(NSEvent *event) {
+        if (recordingShortcut && recordingFn && event.type == NSEventTypeFlagsChanged && event.keyCode == kVK_Function) {
+            NSEventModifierFlags other = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagShift);
+            if ((event.modifierFlags & NSEventModifierFlagFunction) && other == 0) {
+                recordingShortcut = NO;
+                [actions addObject:@"{\"action\":\"shortcut-recorded\",\"keyCode\":63,\"modifiers\":0,\"label\":\"Fn\"}"];
+                return nil;
+            }
+        }
         if (event.type == NSEventTypeKeyDown && recordingShortcut) {
             NSEventModifierFlags modifiers = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagShift);
             recordingShortcut = NO;
@@ -237,6 +246,21 @@ int main(void) {
         NSCAssert(original.resized, @"Original callback was not forwarded");
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+        buddymac_init("");
+        recordingShortcut = YES;
+        recordingFn = YES;
+        NSEvent *fnDown = [NSEvent keyEventWithType:NSEventTypeFlagsChanged location:NSZeroPoint modifierFlags:NSEventModifierFlagFunction timestamp:0 windowNumber:0 context:nil characters:@"" charactersIgnoringModifiers:@"" isARepeat:NO keyCode:kVK_Function];
+        NSEvent *fnUp = [NSEvent keyEventWithType:NSEventTypeFlagsChanged location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:0 context:nil characters:@"" charactersIgnoringModifiers:@"" isARepeat:NO keyCode:kVK_Function];
+        [NSApp sendEvent:fnUp];
+        NSCAssert(actions.count == 0 && recordingShortcut, @"Fn release was recorded");
+        [NSApp sendEvent:fnDown];
+        NSCAssert(actions.count == 1 && !recordingShortcut && [actions.firstObject containsString:@"\"label\":\"Fn\""], @"Fn flagsChanged press was not captured by the real AppKit monitor");
+        [actions removeAllObjects];
+        recordingShortcut = YES;
+        recordingFn = NO;
+        [NSApp sendEvent:fnDown];
+        NSCAssert(actions.count == 0 && recordingShortcut, @"Fn was captured for a shortcut that does not support it");
+        recordingShortcut = NO;
         NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
         window.releasedWhenClosed = NO;
         window.delegate = delegate;
@@ -256,7 +280,7 @@ int main(void) {
         [(id<NSWindowDelegate>)proxy windowDidResize:[NSNotification notificationWithName:NSWindowDidResizeNotification object:gpuiWindow]];
         NSCAssert(gpuiWindow.resized, @"Self-delegating window lost its resize callback");
         NSCAssert(![proxy respondsToSelector:@selector(validRequestorForSendType:returnType:)], @"Responder-chain selector is forwarded back to the window");
-        puts("PASS: drag outcome classification, original delegate forwarding, self-delegating window without recursion, and actual AppKit close veto");
+        puts("PASS: Fn press/release through AppKit, drag outcome classification, original delegate forwarding, self-delegating window without recursion, and actual AppKit close veto");
     }
     return 0;
 }
@@ -267,7 +291,7 @@ bool buddymac_login_enabled(void) { return SMAppService.mainAppService.status ==
 const char *buddymac_set_login(bool enabled) { NSError *error=nil; if(enabled) [SMAppService.mainAppService registerAndReturnError:&error]; else [SMAppService.mainAppService unregisterAndReturnError:&error]; loginError=error.localizedDescription ?: @""; return loginError.UTF8String; }
 
 
-void buddymac_record_shortcut(bool enabled) { recordingShortcut = enabled; }
+void buddymac_record_shortcut(bool enabled, bool allowFn) { recordingShortcut = enabled; recordingFn = allowFn; }
 static NSString *labelResult;
 const char *buddymac_key_label(int keyCode) { labelResult = keyLabel((UInt16)keyCode); return labelResult.UTF8String; }
 

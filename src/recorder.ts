@@ -3,10 +3,10 @@ import { fromCocoa, type RecordedShortcut } from './shortcuts'
 
 let active: ((shortcut: RecordedShortcut | null) => void) | null = null
 
-export function startRecording(callback: (shortcut: RecordedShortcut | null) => void) {
+export function startRecording(callback: (shortcut: RecordedShortcut | null) => void, allowFn = false) {
   active?.(null)
   active = callback
-  recordShortcut(true)
+  recordShortcut(true, allowFn)
 }
 export function stopRecording(callback?: (shortcut: RecordedShortcut | null) => void) {
   if (callback && active !== callback) return

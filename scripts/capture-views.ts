@@ -25,6 +25,7 @@ const target=join(root,'Fixture.app');await mkdir(join(target,'Contents/Resource
 await Bun.write(join(target,'Contents/Info.plist'),'<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>org.buddytools.fixture</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>')
 const icon='/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns'
 await Bun.write(env.BUDDYMAC_LEGACY_DOCK_MANIFEST,JSON.stringify({version:1,theme:'Monochrome',icons:[{id:'a',name:'Fixture app',appPath:target,bundleIdentifier:null,iconPath:icon,styledIconPath:icon}]}))
+await Bun.write(join(env.BUDDYMAC_DATA_DIR,'Dock/settings.json'),JSON.stringify({packPath:env.BUDDYMAC_LEGACY_DOCK_MANIFEST}))
 const app=await launch({command:process.execPath,args:['src/app.tsx'],env})
 const shot=async(name:string)=>{if(only&&!name.includes(only))return;await Bun.sleep(700);await app.screenshot({path:join(out,`${name}.png`)});console.log(name)}
 const tab=async(section:string,name:string)=>{await app.getByTestId(`${section}-tab-${name}`).click();await Bun.sleep(300)}

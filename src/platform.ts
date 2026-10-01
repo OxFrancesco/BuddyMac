@@ -12,7 +12,7 @@ const library=dlopen(resolve(root,'libbuddymac.dylib'),{
  buddymac_next_action:{args:[],returns:FFIType.cstring},
  buddymac_drag:{args:[FFIType.ptr],returns:FFIType.int},
  buddymac_copy_text:{args:[FFIType.ptr],returns:FFIType.void},
- buddymac_record_shortcut:{args:[FFIType.bool],returns:FFIType.void},
+ buddymac_record_shortcut:{args:[FFIType.bool,FFIType.bool],returns:FFIType.void},
  buddymac_key_label:{args:[FFIType.int],returns:FFIType.cstring},
  buddymac_register_hotkeys:{args:[FFIType.ptr],returns:FFIType.cstring},
  buddymac_status_title:{args:[FFIType.ptr],returns:FFIType.void},
@@ -58,7 +58,7 @@ export async function appBundleInfo(appPath:string):Promise<{bundleID:string;nam
  return {bundleID,name:await read('CFBundleDisplayName')||await read('CFBundleName')||appPath.split('/').at(-1)?.replace(/\.app$/,'')||bundleID}
 }
 
-export const recordShortcut=(enabled:boolean)=>library.symbols.buddymac_record_shortcut(enabled)
+export const recordShortcut=(enabled:boolean,allowFn=false)=>library.symbols.buddymac_record_shortcut(enabled,allowFn)
 export const nativeKeyLabel=(keyCode:number)=>String(library.symbols.buddymac_key_label(keyCode))
 export interface GlobalHotkey{id:string;keyCode:number;modifiers:number}
 export function registerHotkeys(hotkeys:GlobalHotkey[]){const failed=String(library.symbols.buddymac_register_hotkeys(ptr(cString(JSON.stringify(hotkeys)))));return failed?failed.split(','):[]}

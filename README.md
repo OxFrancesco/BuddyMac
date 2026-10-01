@@ -39,6 +39,10 @@ The packaged UI and Liny agent share one Bun executable. Liny still runs in its 
 
 ## First use
 
+Talk cleanup, Write rewriting and voice editing default to `~openai/gpt-luna-latest`. Upgrades migrate the old built-in Gemini defaults once and retain custom selections.
+
+Talk can record Fn as a shortcut. In macOS Keyboard settings, set "Press Globe key to" to "Do Nothing" and allow BuddyMac Accessibility access to use Fn outside the app.
+
 New installations start empty. BuddyMac does not automatically import settings, files, Dock packs, or local model weights from older utilities. Liny profile imports and sharing Focus with NotchFlow are explicit actions.
 
 - Talk and Write: open Talk → Settings → Set API key. BuddyMac uses its own Keychain item. Legacy keys stay with their original apps.

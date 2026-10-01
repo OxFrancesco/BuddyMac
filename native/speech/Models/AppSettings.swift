@@ -84,7 +84,7 @@ enum RewriteProviderKind: String, Codable, CaseIterable, Identifiable, Sendable 
 }
 
 enum OpenRouterModel {
-    static let defaultID = "google/gemini-3.1-flash-lite"
+    static let defaultID = OpenRouterClient.defaultTextModel
 }
 
 struct OpenRouterModelSummary: Identifiable, Codable, Hashable, Sendable {

@@ -53,6 +53,19 @@ struct SpeechStorage {
         if FileManager.default.fileExists(atPath: writingURL.path) {
             writing = try JSONDecoder().decode(WritingData.self, from: Data(contentsOf: writingURL))
         }
+        let defaultsMigration = root.appendingPathComponent("text-model-defaults-v1.json")
+        if !FileManager.default.fileExists(atPath: defaultsMigration.path) {
+            if ["", "google/gemini-2.5-flash-lite"].contains(data.preferences.cleanupModel.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                data.preferences.cleanupModel = OpenRouterClient.defaultTextModel
+            }
+            if case .openRouter(let model) = writing.settings.rewriteProvider,
+               ["", "google/gemini-3.1-flash-lite"].contains(model.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                writing.settings.rewriteProvider = .openRouter(modelID: OpenRouterClient.defaultTextModel)
+            }
+            try save()
+            try saveWriting()
+            try Self.writePrivate(Data("1".utf8), to: defaultsMigration)
+        }
     }
 
     func saveWriting() throws { try Self.writePrivate(JSONEncoder().encode(writing), to: writingURL) }

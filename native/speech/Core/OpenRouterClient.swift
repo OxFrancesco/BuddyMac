@@ -3,8 +3,9 @@ import Foundation
 public struct OpenRouterClient: Sendable {
     public static let defaultTranscriptionModel = "microsoft/mai-transcribe-2"
     public static let fallbackTranscriptionModel = "x-ai/grok-stt-1.0"
-    public static let defaultCleanupModel = "google/gemini-2.5-flash-lite"
-    public static let defaultEditingModel = "~openai/gpt-luna-latest"
+    public static let defaultTextModel = "~openai/gpt-luna-latest"
+    public static let defaultCleanupModel = defaultTextModel
+    public static let defaultEditingModel = defaultTextModel
     public static let maximumAudioBytes = 25 * 1_024 * 1_024
 
     private let apiKey: String

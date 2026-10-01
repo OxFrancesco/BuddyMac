@@ -40,14 +40,14 @@ export function Setting({label,detail,children,id}:{label:string;detail?:string;
 export function Group({title,children}:{title?:string;children:ReactNode}){
  return <Column style={{gap:0,flexShrink:0}}>{title?<Text muted size={11} style={{paddingBottom:4}}>{title}</Text>:null}{children}</Column>
 }
-export function ShortcutField({value,onRecord,onClear,id}:{value:string;onRecord:(shortcut:RecordedShortcut)=>void;onClear?:()=>void;id:string}){
+export function ShortcutField({value,onRecord,onClear,id,allowFn=false}:{value:string;onRecord:(shortcut:RecordedShortcut)=>void;onClear?:()=>void;id:string;allowFn?:boolean}){
  const [recording,setRecording]=useState(false)
  const callback=useRef<((shortcut:RecordedShortcut|null)=>void)|null>(null)
  useEffect(()=>()=>{if(callback.current)stopRecording(callback.current)},[])
  function toggle(){
   if(recording&&callback.current){stopRecording(callback.current);callback.current=null;setRecording(false);return}
   const next=(shortcut:RecordedShortcut|null)=>{callback.current=null;setRecording(false);if(shortcut)onRecord(shortcut)}
-  callback.current=next;setRecording(true);startRecording(next)
+  callback.current=next;setRecording(true);startRecording(next,allowFn)
  }
  return <Row style={{gap:0}}><div testId={id} role="button" aria-label={value?`Shortcut ${value}. Click to change`:'Record a shortcut'} tabIndex={0} onClick={toggle} onKeyDown={event=>{if(!recording&&(event.key==='enter'||event.key==='space'))toggle()}} style={{display:'flex',flexDirection:'row',alignItems:'center',height:space.control,minWidth:240,paddingLeft:space.inset-1,paddingRight:space.inset-1,borderWidth:1,borderColor:recording?C.accent:C.line,cursor:'pointer',userSelect:'none'}}><Text muted={!value&&!recording} style={recording?{color:C.accent}:{}}>{recording?'Press the new shortcut. Escape cancels.':value||'Not set'}</Text></div>{onClear&&value&&!recording?<Button quiet onClick={onClear}>Clear</Button>:null}</Row>
 }

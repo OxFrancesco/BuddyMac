@@ -18,4 +18,4 @@ The app is signed and notarized by Apple, with the notarization ticket included.
 
 Source and downloads: https://github.com/OxFrancesco/BuddyMac
 
-Installer 0.1.4 downloads the same notarized BuddyMac 0.1.3 app using macOS curl with HTTP/2 and a smaller tar.xz archive. The installed app remains in Applications after Terminal closes.
+The installer downloads the notarized app using macOS curl with HTTP/2 and a smaller tar.xz archive. The installed app remains in Applications after Terminal closes.
