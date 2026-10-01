@@ -553,7 +553,7 @@ final class SpeechService {
                 try Task.checkCancellation()
                 if let selection {
                     setPhase("formatting")
-                    output = try await client.edit(selection, instruction: output, model: preferences.cleanupModel, memory: memory, screen: screen)
+                    output = try await client.edit(selection, instruction: output, memory: memory, screen: screen)
                 } else if preferences.cleanupEnabled && style != .verbatim {
                     setPhase("formatting")
                     let protected = TextProcessor.protect(output, vocabulary: preferences.vocabulary, snippets: preferences.snippets)

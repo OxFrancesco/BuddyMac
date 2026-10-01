@@ -4,6 +4,7 @@ public struct OpenRouterClient: Sendable {
     public static let defaultTranscriptionModel = "microsoft/mai-transcribe-2"
     public static let fallbackTranscriptionModel = "x-ai/grok-stt-1.0"
     public static let defaultCleanupModel = "google/gemini-2.5-flash-lite"
+    public static let defaultEditingModel = "~openai/gpt-luna-latest"
     public static let maximumAudioBytes = 25 * 1_024 * 1_024
 
     private let apiKey: String
@@ -118,7 +119,7 @@ public struct OpenRouterClient: Sendable {
     public func edit(
         _ selectedText: String,
         instruction: String,
-        model: String = OpenRouterClient.defaultCleanupModel,
+        model: String = OpenRouterClient.defaultEditingModel,
         memory: String? = nil,
         screen: ScreenContext? = nil
     ) async throws -> String {
