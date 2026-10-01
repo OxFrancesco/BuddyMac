@@ -24,9 +24,7 @@ struct SpeechStorage {
     var writeProvider: String { writing.settings.rewriteProvider.kind.rawValue }
     var writingURL: URL { store.url.deletingLastPathComponent().appendingPathComponent("writing.json") }
     var modelURL: URL {
-        let own = store.url.deletingLastPathComponent().appendingPathComponent("models").appendingPathComponent(S1MiniModel.filename)
-        if FileManager.default.fileExists(atPath: own.path) || ProcessInfo.processInfo.environment["BUDDYMAC_SPEECH_DATA_DIR"] != nil { return own }
-        return URL.applicationSupportDirectory.appendingPathComponent("BuddyTalk/models").appendingPathComponent(S1MiniModel.filename)
+        store.url.deletingLastPathComponent().appendingPathComponent("models").appendingPathComponent(S1MiniModel.filename)
     }
 
     init() throws {
@@ -38,29 +36,6 @@ struct SpeechStorage {
         writeURL = importedDirectory.appendingPathComponent("BuddyWrite.plist")
         try FileManager.default.createDirectory(at: importedDirectory, withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
-        let isolated = ProcessInfo.processInfo.environment["BUDDYMAC_SPEECH_DATA_DIR"] != nil
-        if !FileManager.default.fileExists(atPath: store.url.path), !isolated {
-            let legacy = URL.applicationSupportDirectory.appendingPathComponent("BuddyTalk/settings.json")
-            if FileManager.default.fileExists(atPath: legacy.path) {
-                let bytes = try Data(contentsOf: legacy)
-                let decoded = try JSONDecoder().decode(StoredData.self, from: bytes)
-                let snapshot = importedDirectory.appendingPathComponent("BuddyTalk-settings.json")
-                if !FileManager.default.fileExists(atPath: snapshot.path) { try Self.writePrivate(bytes, to: snapshot) }
-                try store.save(decoded)
-                let memory = legacy.deletingLastPathComponent().appendingPathComponent("memory.md")
-                if FileManager.default.fileExists(atPath: memory.path) {
-                    try MemoryFile(url: root.appendingPathComponent("memory.md")).save(MemoryFile(url: memory).read())
-                }
-            }
-        }
-        if !FileManager.default.fileExists(atPath: writeURL.path), !isolated {
-            let legacy = UserDefaults(suiteName: "com.francescooddo.BuddyGrammar")
-            var values: [String: Data] = [:]
-            for key in ["BuddyGrammar.settings", "BuddyGrammar.profiles", "BuddyGrammar.notes"] {
-                if let bytes = legacy?.data(forKey: key) { values[key] = bytes }
-            }
-            try Self.writePrivate(PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0), to: writeURL)
-        }
         data = try store.load()
         writing = WritingData()
         if FileManager.default.fileExists(atPath: writeURL.path) {

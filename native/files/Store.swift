@@ -26,7 +26,6 @@ struct BucketStore {
         if FileManager.default.fileExists(atPath: file.path) {
             paths = try JSONDecoder().decode([String].self, from: Data(contentsOf: file))
         } else {
-            paths = try legacyPaths()
             try JSONEncoder().encode(paths).write(to: file, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         }

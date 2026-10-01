@@ -18,6 +18,6 @@ Both the custom domain and the exact `mac.buddytools.org/*` route are required. 
 
 The `.openai/hosting.json` file belongs to the earlier private Sites preview. Cloudflare deployment uses `wrangler.jsonc`.
 
-Installation availability is intentionally explicit: the repository is private and had no GitHub releases when checked on 2026-09-30. Add a download link only after a distributable release exists. Minimum requirements come from `scripts/build.ts` and the native app's README.
+The repository is public. The landing page links to GitHub and releases, and documents installation with `npx buddymac@latest`. Requirements and installation behavior follow `packages/buddymac/README.md`.
 
 Feature instructions follow the current views in `src/`, including the Focus shared-store and iCloud settings. Review the guide when app labels or behavior change.

@@ -39,6 +39,8 @@ The packaged UI and Liny agent share one Bun executable. Liny still runs in its 
 
 ## First use
 
+New installations start empty. BuddyMac does not automatically import settings, files, Dock packs, or local model weights from older utilities. Liny profile imports and sharing Focus with NotchFlow are explicit actions.
+
 - Talk and Write: open Talk → Settings → Set API key. BuddyMac uses its own Keychain item. Legacy keys stay with their original apps.
 - Recording and insertion: macOS grants microphone and Accessibility permissions separately. Enable shortcuts only after disabling overlapping shortcuts in the original apps.
 - Files: Settings selects a normal window or a left/right edge shelf.

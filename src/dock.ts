@@ -229,7 +229,7 @@ export async function setCurrentPack(path: string): Promise<void> {
 export async function loadCurrentPack(): Promise<SavedDockPack | null> {
   const path = await currentPackPath();
   if (path && await Bun.file(path).exists()) return loadSavedDockPack(path);
-  return loadSavedDockPack();
+  return null;
 }
 
 const iconSizes = [16, 32, 128, 256, 512];

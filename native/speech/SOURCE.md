@@ -16,11 +16,11 @@ Adapted from BuddyGrammar, the BuddyWrite source, at commit `fcc9d004c01565d9e5f
 
 `Storage.swift`, `Service.swift`, `Main.swift` and `src/speech.ts` implement BuddyMac's private stores and JSON-lines connection. Data-dir overrides disable real Keychain access and legacy imports for isolated checks. Keychain status reads only attributes with UI disabled. Key values stay in the native process and are only resolved noninteractively for an explicit cloud operation. If a legacy key needs an authorization dialog, the request fails with instructions to save a key in BuddyMac Talk settings. Startup does not record audio, load model weights, register global shortcuts or call a provider.
 
-Talk snapshots live at `~/Library/Application Support/BuddyMac/Speech/Imported/BuddyTalk-settings.json`; Write's three JSON preference values are in `Imported/BuddyWrite.plist`. Active editable files are `settings.json`, `writing.json`, and `memory.md`. Files are 0600 and the Speech root is 0700. Original stores and model weights remain unchanged. Deleting active history does not delete immutable import snapshots or the original app's history.
+New installations do not import BuddyTalk or BuddyWrite preferences. Older installations may retain Talk snapshots at `~/Library/Application Support/BuddyMac/Speech/Imported/BuddyTalk-settings.json`; Write's three JSON preference values are in `Imported/BuddyWrite.plist`. Active editable files are `settings.json`, `writing.json`, and `memory.md`. Files are 0600 and the Speech root is 0700. Original stores and model weights remain unchanged. Deleting active history does not delete immutable import snapshots or the original app's history.
 
 The llama b10856 macOS framework is copied from the installed BuddyTalk app into `build/Frameworks/llama.framework`, then packaged in BuddyMac's `Contents/Frameworks`. The build links both development and app-bundle rpaths. The packaged app has no dependency on the original app. The MIT license is included under `ThirdParty/llama-LICENSE`.
 
-S1-mini verifies the pinned file length and SHA-256 before loading. It reads the existing BuddyTalk model when available, or a BuddyMac model explicitly downloaded by the user. It never downloads at launch. Local cleanup failures keep the raw transcript and do not fall back to cloud cleanup. Cloud transcription is still required for Talk recording.
+S1-mini verifies the pinned file length and SHA-256 before loading. It reads only a BuddyMac model explicitly downloaded by the user. It never downloads at launch. Local cleanup failures keep the raw transcript and do not fall back to cloud cleanup. Cloud transcription is still required for Talk recording.
 
 ## Verification
 

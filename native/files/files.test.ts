@@ -11,13 +11,14 @@ process.env.BUDDYMAC_LEGACY_FILES_DIR = legacy;
 process.env.BUDDYMAC_PASTEBOARD_NAME = `BuddyMac.Files.Test.${crypto.randomUUID()}`;
 afterAll(async () => { await rm(directory, { recursive: true }); });
 
-test("imports a snapshot, keeps source files, and serializes concurrent writers", async () => {
+test("starts empty, imports only on request, and serializes concurrent writers", async () => {
   const first = join(directory, "A file ' $ with spaces.txt");
   await Bun.write(first, "original contents");
   const manifest = JSON.stringify([first]);
   await Bun.write(join(legacy, "manifest.json"), manifest);
   await Bun.write(join(legacy, "manifest.lock"), "");
-  const imported = await listFiles();
+  expect(await listFiles()).toEqual([]);
+  const imported = await importLegacyFiles();
   const stored = imported[0]?.path;
   if (!stored) throw new Error("Imported file missing");
   expect(await Bun.file(stored).text()).toBe("original contents");
@@ -126,8 +127,8 @@ test('corrupt own or legacy storage fails without destroying the manifest; own s
   expect(await listFiles()).toEqual([]);
   expect(await Bun.file(join(legacy, 'manifest.json')).text()).toBe('{broken legacy');
   const result = await requestRaw('{"action":"list"}', { BUDDYMAC_DATA_DIR: join(directory, 'fresh') });
-  expect(result.code).toBe(1);
-  expect(await Bun.file(join(directory, 'fresh/Files/manifest.json')).exists()).toBe(false);
+  expect(result.code).toBe(0);
+  expect(await Bun.file(join(directory, 'fresh/Files/manifest.json')).json()).toEqual([]);
 });
 
 test('edge preferences default off, persist all controls, reject invalid data, and stay inactive without a window', async () => {
