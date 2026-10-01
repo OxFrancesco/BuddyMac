@@ -6,7 +6,7 @@ The interface follows [Francesco's design guidelines](https://oddofrancesco.com/
 
 ## Run and build
 
-The npm installer lives in [`packages/buddymac`](packages/buddymac). Once published:
+Install the app with the [npm package](https://www.npmjs.com/package/buddymac):
 
 ```sh
 npx buddymac
