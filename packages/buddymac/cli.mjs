@@ -1,21 +1,23 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
+import { createWriteStream, renameSync } from 'node:fs';
+import { lstat, mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const release = JSON.parse(await readFile(new URL('./release.json', import.meta.url), 'utf8'));
 const { version: installerVersion } = JSON.parse(await readFile(new URL('./package.json', import.meta.url), 'utf8'));
 const args = process.argv.slice(2);
 const help = `Usage: npx buddymac [--destination <folder>] [--no-open]
 
-Installs BuddyMac ${release.version} to ~/Applications and opens it.
+Installs or updates BuddyMac ${release.version} in ~/Applications and opens it.
 Requires Apple Silicon, macOS 26+, and Node.js 20+.
-Existing apps are never overwritten. Quit and move an old copy before updating.
+Updates preserve settings and keep the previous app for recovery.
+If BuddyMac is running, quit it when prompted to finish the update.
 The download is signed and notarized by Apple. macOS download protection stays enabled.
 
   --destination <folder>  Install in a different folder
@@ -29,6 +31,65 @@ function run(command, parameters) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || `${command} failed`);
   return result.stdout.trim();
+}
+
+const identifier = 'org.buddytools.BuddyMac';
+const signingRequirement = '=anchor apple generic and certificate leaf[subject.OU] = "G2442WAF29"';
+function appVersion(app) {
+  const plist = join(app, 'Contents/Info.plist');
+  if (run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', plist]) !== identifier) {
+    throw new Error(`Refusing to replace an unrelated app at ${app}.`);
+  }
+  const version = run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', plist]);
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Unrecognized app version at ${app}: ${version}`);
+  return version;
+}
+function compareVersions(left, right) {
+  const a = left.split('.').map(Number), b = right.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return 0;
+}
+async function exists(path) {
+  try { await lstat(path); return true; }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
+async function installedVersion(app) {
+  if (!await exists(app)) return null;
+  const info = await lstat(app);
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error(`Expected an app folder at ${app}. Move it before installing.`);
+  const version = appVersion(app);
+  run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '-R', signingRequirement, app]);
+  return version;
+}
+
+const runningAppsScript = `ObjC.import('AppKit');
+const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier('${identifier}');
+const paths = [];
+for (let i = 0; i < apps.count; i++) paths.push(ObjC.unwrap(apps.objectAtIndex(i).bundleURL.path));
+JSON.stringify(paths);`;
+async function isRunning(app) {
+  const executable = join(app, 'Contents/MacOS/BuddyMac');
+  const original = await stat(executable, { bigint: true });
+  const paths = JSON.parse(run('/usr/bin/osascript', ['-l', 'JavaScript', '-e', runningAppsScript]));
+  for (const path of paths) {
+    if (path === app) return true;
+    try {
+      const running = await stat(join(path, 'Contents/MacOS/BuddyMac'), { bigint: true });
+      // App Translocation changes the device, but retains the original file identity.
+      if (running.ino === original.ino && running.birthtimeNs === original.birthtimeNs &&
+          (running.dev === original.dev || path.includes('/AppTranslocation/'))) return true;
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  return false;
+}
+async function waitForQuit(app, signal) {
+  if (!await isRunning(app)) return;
+  process.stdout.write('Quit BuddyMac from its menu bar menu to finish updating. Waiting up to 2 minutes; Ctrl+C cancels.\n');
+  const deadline = Date.now() + 120_000;
+  while (await isRunning(app)) {
+    if (Date.now() >= deadline) throw new Error('BuddyMac is still running. Nothing was replaced. Quit it and run this command again.');
+    await sleep(1000, undefined, { signal });
+  }
 }
 
 async function install() {
@@ -52,18 +113,27 @@ async function install() {
   if (Number(macOS.split('.')[0]) < 26) throw new Error(`BuddyMac requires macOS 26 or later; found ${macOS}.`);
   await mkdir(destination, { recursive: true });
   const target = join(destination, 'BuddyMac.app');
+  const backup = join(destination, '.buddymac-previous.app');
   const lock = join(destination, '.buddymac-install-lock');
-  await mkdir(lock).catch(error => {
-    if (error.code === 'EEXIST') throw new Error(`Another install may be running. If it stopped, remove ${lock} and retry.`);
-    throw error;
-  });
+  const locked = spawnSync('/usr/bin/shlock', ['-f', lock, '-p', String(process.pid)], { encoding: 'utf8' });
+  if (locked.error) throw locked.error;
+  if (locked.status !== 0) throw new Error(`Another install may be running. If an older installer stopped, remove ${lock} and retry.`);
   let stage;
+  const cancel = new AbortController();
+  const onCancel = () => cancel.abort(new Error('Installation cancelled.'));
+  process.on('SIGINT', onCancel);
+  process.on('SIGTERM', onCancel);
   try {
-    try {
-      await access(target);
-      throw new Error(`${target} already exists. Quit BuddyMac and move that copy before installing, or choose another --destination.`);
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+    if (!await exists(target) && await exists(backup)) {
+      await installedVersion(backup);
+      renameSync(backup, target);
+      process.stdout.write('Recovered the previous app from an interrupted update.\n');
+    }
+    const previousVersion = await installedVersion(target);
+    if (previousVersion && compareVersions(previousVersion, release.version) >= 0) {
+      process.stdout.write(`BuddyMac ${previousVersion} is already installed${previousVersion === release.version ? ' and up to date' : '; keeping the newer version'}.\n`);
+      if (open) run('/usr/bin/open', [target]);
+      return;
     }
     stage = await mkdtemp(join(destination, '.buddymac-'));
     const archive = join(stage, 'BuddyMac.tar.xz');
@@ -72,7 +142,7 @@ async function install() {
     const download = spawn('/usr/bin/curl', [
       '--disable', '--fail', '--location', '--http2', '--proto', '=https', '--proto-redir', '=https',
       '--silent', '--show-error', '--connect-timeout', '20', '--max-time', '300', release.url,
-    ], { env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], signal: cancel.signal });
     let downloadError = '';
     download.stderr.on('data', chunk => { downloadError = (downloadError + chunk.toString()).slice(-4096); });
     const finished = new Promise((resolve, reject) => {
@@ -110,18 +180,39 @@ async function install() {
     const app = join(stage, 'BuddyMac.app');
     process.stdout.write(`Unpacked in ${((performance.now() - unpackStarted) / 1000).toFixed(1)}s. Checking Apple signature and notarization…\n`);
     const verificationStarted = performance.now();
-    run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '-R', '=anchor apple generic and certificate leaf[subject.OU] = "G2442WAF29"', app]);
-    const identifier = run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents/Info.plist')]);
-    if (identifier !== 'org.buddytools.BuddyMac') throw new Error('Unexpected application identifier.');
+    run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '-R', signingRequirement, app]);
+    if (appVersion(app) !== release.version) throw new Error('Downloaded app version does not match the release.');
     run('/usr/bin/xattr', ['-w', 'com.apple.quarantine', `0081;${Math.floor(Date.now() / 1000).toString(16)};BuddyMac Installer;`, app]);
     run('/usr/sbin/spctl', ['--assess', '--type', 'execute', app]);
     process.stdout.write(`Apple verification passed in ${((performance.now() - verificationStarted) / 1000).toFixed(1)}s.\n`);
-    await rename(app, target);
-    process.stdout.write(`Installed ${target} in ${((performance.now() - started) / 1000).toFixed(1)}s.\n`);
+    if (previousVersion) {
+      await waitForQuit(target, cancel.signal);
+      if (await installedVersion(target) !== previousVersion) throw new Error('The installed app changed during download. Run the installer again.');
+      if (await exists(backup)) {
+        await installedVersion(backup);
+        await waitForQuit(backup, cancel.signal);
+        await rm(backup, { recursive: true });
+      }
+    } else if (await exists(target)) throw new Error('An app appeared at the destination during download. Run the installer again.');
+    cancel.signal.throwIfAborted();
+    if (previousVersion) renameSync(target, backup);
+    try { renameSync(app, target); }
+    catch (error) {
+      if (previousVersion) {
+        try { renameSync(backup, target); }
+        catch { throw new Error(`Update failed and automatic recovery could not finish. Your previous app is safe at ${backup}. Move it back to ${target}.`, { cause: error }); }
+        process.stderr.write('Update failed. The previous app was restored.\n');
+      }
+      throw error;
+    }
+    process.stdout.write(`${previousVersion ? `Updated BuddyMac ${previousVersion} → ${release.version} at` : 'Installed'} ${target} in ${((performance.now() - started) / 1000).toFixed(1)}s.\n`);
+    if (previousVersion) process.stdout.write(`Settings are unchanged. Previous app saved at ${backup}.\n`);
     if (open) run('/usr/bin/open', [target]);
   } finally {
-    if (stage) await rm(stage, { recursive: true, force: true });
-    await rm(lock, { recursive: true, force: true });
+    process.removeListener('SIGINT', onCancel);
+    process.removeListener('SIGTERM', onCancel);
+    try { if (stage) await rm(stage, { recursive: true, force: true }); }
+    finally { await rm(lock, { force: true }); }
   }
 }
 
