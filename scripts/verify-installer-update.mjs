@@ -111,7 +111,11 @@ try {
   checks.push('Rejected download leaves the installed app unchanged');
 
   await rm(backup, { recursive: true }); await rename(target, backup);
-  await writeFile(join(destination, '.buddymac-install-lock'), '2147483647\n');
+  const exited = spawnSync('/usr/bin/true', [], { env });
+  assert.equal(exited.status, 0);
+  assert.throws(() => process.kill(exited.pid, 0), { code: 'ESRCH' });
+  await writeFile(join(destination, '.buddymac-install-lock'), `${exited.pid}\n`);
+  await Bun.sleep(1500);
   const recovery = await install('interrupted').done;
   assert.equal(recovery.code, 0); assert(recovery.output.includes('Recovered the previous app'));
   assert.equal((await stat(target)).ino, installedInode); await cleanTransaction();
