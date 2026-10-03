@@ -142,7 +142,7 @@ test('edge preferences default off, persist all controls, reject invalid data, a
   ]) {
     await saveEdgeSettings(settings);
     expect(await loadEdgeSettings()).toEqual(settings);
-    expect(getEdgeState()).toEqual({ active: false, revealed: false });
+    expect(getEdgeState()).toEqual({ active: false, revealed: false, requested: false });
   }
   for (const holdDelay of [0.1, 3.1, Number.NaN, Number.POSITIVE_INFINITY]) {
     expect(() => saveEdgeSettings({ ...defaultEdgeSettings, holdDelay })).toThrow('Invalid Files edge settings');

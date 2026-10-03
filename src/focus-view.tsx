@@ -107,7 +107,7 @@ function SettingsTab({ settings, run }: { settings: FocusSettings; run: (work: (
       <Setting label="Notification permission" detail="Ask macOS again, or change it in System Settings."><Button onClick={() => void run(() => focus.notificationPermission())}>Ask again</Button><Button onClick={() => openSettingsPane('notifications')}>Open settings</Button></Setting>
     </Group>
     <Group title="Notch and menu bar">
-      <Setting label="Open the panel when you hover the notch" detail="Works while the BuddyMac window is closed. Move away to hide it."><Check id="focus-notch" label={layout.focusNotch ? 'On' : 'Off'} checked={layout.focusNotch} onChange={focusNotch => void surfaces.update(current => ({ ...current, focusNotch }))} /></Setting>
+      <Setting label="Open the panel when you hover the notch" detail="Move away to hide it."><Check id="focus-notch" label={layout.focusNotch ? 'On' : 'Off'} checked={layout.focusNotch} onChange={focusNotch => void surfaces.update(current => ({ ...current, focusNotch }))} /></Setting>
       <Setting label="Show the timer in the menu bar" detail="Phase and time left, next to the BuddyMac icon."><Check id="focus-menu-bar" label={layout.focusMenuBar ? 'On' : 'Off'} checked={layout.focusMenuBar} onChange={focusMenuBar => void surfaces.update(current => ({ ...current, focusMenuBar }))} /></Setting>
     </Group>
     <Group title="Sync">

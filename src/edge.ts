@@ -19,6 +19,8 @@ const library = dlopen(resolve(root, "libbuddymac-edge.dylib"), {
   buddymac_edge_files_active: { args: [FFIType.bool], returns: FFIType.void },
   buddymac_edge_show: { args: [], returns: FFIType.void },
   buddymac_edge_state: { args: [], returns: FFIType.cstring },
+  buddymac_edge_presented: { args: [], returns: FFIType.void },
+  buddymac_edge_side: { args: [], returns: FFIType.int },
 });
 
 function parseSettings(value: unknown): EdgeSettings {
@@ -64,9 +66,11 @@ export function saveEdgeSettings(settings: EdgeSettings): Promise<void> {
 
 export const setEdgeFilesActive = (active: boolean) => library.symbols.buddymac_edge_files_active(active);
 export const showEdgeShelf = () => library.symbols.buddymac_edge_show();
-export function getEdgeState(): { active: boolean; revealed: boolean } {
+export const edgePresented = () => library.symbols.buddymac_edge_presented();
+export const getFilesEdge = (): 'left' | 'right' => library.symbols.buddymac_edge_side() === 1 ? 'left' : 'right';
+export function getEdgeState(): { active: boolean; revealed: boolean; requested: boolean } {
   const value: unknown = JSON.parse(String(library.symbols.buddymac_edge_state()));
   if (typeof value !== "object" || value === null || !("active" in value) || typeof value.active !== "boolean" ||
     !("revealed" in value) || typeof value.revealed !== "boolean") throw new Error("Invalid edge state");
-  return { active: value.active, revealed: value.revealed };
+  return { active: value.active, revealed: value.revealed, requested: 'requested' in value && value.requested === true };
 }

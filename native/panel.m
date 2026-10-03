@@ -27,6 +27,7 @@ static BOOL originalTitlebarTransparent;
 static NSWindowTitleVisibility originalTitleVisibility;
 static int panelMode;
 static int sidebarEdge = 2;
+static int filesEdge = 2;
 static NSRect originalFrame;
 static NSSize originalMinSize;
 static NSSize originalMaxSize;
@@ -74,10 +75,11 @@ static NSScreen *pointerScreen(NSWindow *window) {
 }
 
 int buddymac_panel_mode(int mode) {
-    if (mode < 0 || mode > 4) return -1;
+    if (mode < 0 || mode > 5) return -1;
     NSWindow *window = buddyWindow();
     if (!window) return -2;
     if ((window.styleMask & NSWindowStyleMaskFullScreen) != 0) return -3;
+    window.alphaValue = 0;
     if (mode == 0) {
         if (panelMode == 0) return 1;
         restore(window, YES);
@@ -113,11 +115,18 @@ int buddymac_panel_mode(int mode) {
         window.level = NSStatusWindowLevel;
         window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary | NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle;
     }
-    setChrome(window, mode == 4);
+    setChrome(window, mode == 4 || mode == 5);
     window.hidesOnDeactivate = NO;
     CGFloat safeTop = 0;
     if (@available(macOS 12.0, *)) safeTop = screen.safeAreaInsets.top;
-    [window setFrame:mode == 4 ? notchFrame(screen.frame, screen.visibleFrame) : mode == 3 ? sidebarFrame(screen.visibleFrame, sidebarEdge) : panelFrame(screen.frame, screen.visibleFrame, safeTop, mode) display:YES];
+    NSRect filesFrame = NSMakeRect(filesEdge == 1 ? NSMinX(screen.visibleFrame) + 6 : NSMaxX(screen.visibleFrame) - 466,
+        NSMidY(screen.visibleFrame) - 310, 460, 620);
+    filesFrame.size.width = MIN(460, screen.visibleFrame.size.width - 12);
+    filesFrame.size.height = MIN(620, screen.visibleFrame.size.height - 12);
+    filesFrame.origin.x = filesEdge == 1 ? NSMinX(screen.visibleFrame) + 6 : NSMaxX(screen.visibleFrame) - filesFrame.size.width - 6;
+    filesFrame.origin.y = NSMidY(screen.visibleFrame) - filesFrame.size.height / 2;
+    if (mode == 5) window.styleMask = (originalStyle | NSWindowStyleMaskFullSizeContentView) & ~(NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskClosable);
+    [window setFrame:mode == 5 ? filesFrame : mode == 4 ? notchFrame(screen.frame, screen.visibleFrame) : mode == 3 ? sidebarFrame(screen.visibleFrame, sidebarEdge) : panelFrame(screen.frame, screen.visibleFrame, safeTop, mode) display:YES];
     panelMode = mode;
     [NSApp unhideWithoutActivation];
     [window orderFrontRegardless];
@@ -127,12 +136,18 @@ int buddymac_panel_mode(int mode) {
 int buddymac_panel_current_mode(void) { return panelMode; }
 
 void buddymac_panel_sidebar_edge(int edge) { sidebarEdge = edge == 1 ? 1 : 2; }
+void buddymac_panel_files_edge(int edge) { filesEdge = edge == 1 ? 1 : 2; }
+void buddymac_panel_present(void) {
+    NSWindow *window = buddyWindow();
+    window.alphaValue = 1;
+}
 
 /// Puts the full window back after the notch panel borrowed it. If you were in another app, BuddyMac returns
 /// behind that app's front window and hands focus back instead of jumping in front of your work.
 int buddymac_panel_restore(bool front) {
     NSWindow *window = buddyWindow();
     if (!window) return -2;
+    window.alphaValue = 0;
     if (panelMode != 0) restore(window, YES);
     if (front) { [window makeKeyAndOrderFront:nil]; return 1; }
     NSInteger below = 0;

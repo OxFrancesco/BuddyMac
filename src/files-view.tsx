@@ -5,8 +5,11 @@ import { dragFiles } from './platform'
 import { tabs, useTab } from './nav'
 import { Button, C, Check, Empty, ErrorText, Field, Group, Row, Setting, TabbedPage, Text } from './ui'
 
+let cachedFiles: ShelfFile[] | null = null
+
 export function FilesView({ shelf = false }: { shelf?: boolean }) {
-  const [files, setFiles] = useState<ShelfFile[]>([])
+  const [files, setFiles] = useState<ShelfFile[]>(cachedFiles ?? [])
+  const [loaded, setLoaded] = useState(cachedFiles !== null)
   const [selected, setSelected] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
@@ -27,6 +30,8 @@ export function FilesView({ shelf = false }: { shelf?: boolean }) {
 
   function select(paths: string[]) { selection.current = paths; setSelected(paths) }
   function acceptFiles(next: ShelfFile[]) {
+    cachedFiles = next
+    setLoaded(true)
     setFiles(next)
     select(selection.current.filter(path => next.some(file => file.path === path)))
   }
@@ -112,7 +117,7 @@ export function FilesView({ shelf = false }: { shelf?: boolean }) {
     <div style={{ flexShrink: 0 }}><Field id="files-search" value={query} onChange={setQuery} placeholder="Find a file" /></div>
     <ErrorText message={error} />
     <div testId="file-shelf" onFileDrop={event => { const paths = event.paths; if (paths?.length) void run(() => addFiles(paths)) }} style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: compact ? 80 : 160, overflowY: 'scroll', borderTopWidth: 1, borderColor: C.line }}>
-      {shown.length === 0 ? <Empty>{query ? 'No matching files.' : 'Drop files here, paste them, or choose Add files.'}</Empty> : shown.map(file => <div key={file.path} testId={`file-${file.name}`} role="button" aria-label={file.name} tabIndex={0}
+      {!loaded ? null : shown.length === 0 ? <Empty>{query ? 'No matching files.' : 'Drop files here, paste them, or choose Add files.'}</Empty> : shown.map(file => <div key={file.path} testId={`file-${file.name}`} role="button" aria-label={file.name} tabIndex={0}
         onClick={event => {
           if (suppressClick.current) { suppressClick.current = false; return }
           if (event.clickCount === 2) { void run(() => openFile(file.path)); return }

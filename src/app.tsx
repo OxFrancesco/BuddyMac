@@ -3,7 +3,7 @@ import { appendFileSync } from 'node:fs'
 import { render, useGpuix, useWindowSize } from '@gpuix/react'
 import type { EventPayload } from '@gpuix/native'
 import { CompactView } from './compact-view'
-import { getPanelMode, hidePanel, requestCompact, restorePanel, setPanelMode, setSidebarEdge, subscribeCompact, type PanelMode } from './panel'
+import { getPanelMode, hidePanel, presentPanel, requestCompact, restorePanel, setPanelMode, setFilesEdge, setSidebarEdge, subscribeCompact, type PanelMode } from './panel'
 import { FilesView } from './files-view'
 import { LinySidebar, LinyView, captureScreen, type Image } from './liny-view'
 import { liny } from './liny'
@@ -22,7 +22,7 @@ import { hideWindow, windowKey, initializePlatform, installMenu, keepRunning, ne
 import { removeFiles } from './files'
 import { dockFailureMessage, reapplyManaged, refreshDock } from './dock'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
-import { configureEdge, getEdgeState, loadEdgeSettings, setEdgeFilesActive } from './edge'
+import { configureEdge, edgePresented, getEdgeState, getFilesEdge, loadEdgeSettings, setEdgeFilesActive } from './edge'
 import { isSection, nav, sections, useNav, type Section } from './nav'
 import { Palette, paletteKey } from './palette'
 import { takeoverFromLaunch } from './takeover'
@@ -67,6 +67,7 @@ function linyCloseArea(pointer: PointerState, edge: 'left' | 'right') {
 // NotchFlow's hotspot: a band under the menu bar centre, 18% of the display wide (190 to 300 points).
 function notchZone(pointer: PointerState) {
   return pointer.screens.some(screen => {
+    if (!inRect(pointer, screen)) return false
     const menuBar = Math.max(screen.y + screen.height - screen.visibleTop, 28)
     const width = Math.min(Math.max(screen.width * 0.18, 190), 300)
     return pointer.y >= screen.y + screen.height - menuBar - 18 && pointer.y <= screen.y + screen.height && Math.abs(pointer.x - (screen.x + screen.width / 2)) <= width / 2
@@ -96,31 +97,44 @@ function App() {
     if (current === next) return
     traceSurface(`${current} -> ${next}`)
     // The notch panel and the Liny sidebar borrow the one window. Remember what to give it back to.
-    if (next === 'notch' || next === 'liny') { floatingReturn = current === 'main' ? 'main' : 'hidden'; floatingFront = current === 'main' && windowKey() }
+    if (next === 'notch' || next === 'liny' || next === 'files') {
+      if (current === 'main' || current === 'hidden') { floatingReturn = current; floatingFront = current === 'main' && windowKey() }
+    }
     try {
-      const floating: PanelMode | null = next === 'focus' || next === 'talk' || next === 'liny' || next === 'notch' ? next : null
-      if (next !== 'hidden' && next !== 'files') setEdgeFilesActive(false)
+      const floating: PanelMode | null = next === 'focus' || next === 'talk' || next === 'liny' || next === 'notch' || next === 'files' ? next : null
+      if (next !== 'files') setEdgeFilesActive(false)
       if (floating) {
         if (floating === 'liny') setSidebarEdge(layoutRef.current.linySidebar.edge)
+        if (floating === 'files') setFilesEdge(getFilesEdge())
         setPanelMode(floating)
         if (floating === 'liny') renderer?.activateWindow?.()
       } else if (next === 'main') {
         if (getPanelMode() !== 'normal') setPanelMode('normal')
         renderer?.activateWindow?.()
       } else if (next === 'hidden') {
-        if (getPanelMode() !== 'normal') hidePanel(); else if (current !== 'files') hideWindow()
+        if (getPanelMode() !== 'normal') hidePanel(); else hideWindow()
       }
       surfaceRef.current = next
       setSurface(next)
-      if (next === 'hidden' || next === 'files') setEdgeFilesActive(true)
+      if (next === 'hidden' || next === 'files' || next === 'main') setEdgeFilesActive(true)
     } catch (cause) { report(cause) }
   }
   const openMain = (target?: Section) => { if (target) nav.go(target); change('main') }
   function dismissFloating() {
     traceSurface(`dismiss ${surfaceRef.current} to ${floatingReturn}`)
     if (floatingReturn !== 'main') { change('hidden'); return }
-    try { restorePanel(floatingFront); surfaceRef.current = 'main'; setSurface('main') } catch (cause) { report(cause) }
+    try { restorePanel(floatingFront); surfaceRef.current = 'main'; setSurface('main'); setEdgeFilesActive(true) } catch (cause) { report(cause) }
   }
+
+  useEffect(() => {
+    if (surface === 'hidden') return
+    // Let GPUI paint the new content at its final size before revealing the window.
+    const timer = setTimeout(() => {
+      presentPanel()
+      if (surface === 'files') edgePresented()
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [surface, size.width, size.height])
 
   async function captureForLiny() {
     try {
@@ -162,7 +176,8 @@ function App() {
     void surfaces.load().catch(report)
     void restoreSpeechShortcuts().catch(report)
     if (process.env.GPUIX_BACKGROUND !== '1') { installMenu(); keepRunning() }
-    void loadEdgeSettings().then(configureEdge).catch(report)
+    else if (process.env.BUDDYMAC_VERIFY_SURFACES === '1') keepRunning()
+    void loadEdgeSettings().then(settings => { setEdgeFilesActive(true); configureEdge(settings) }).catch(report)
     if (process.argv.includes('--takeover')) void takeoverFromLaunch().then(async problems => { if (problems.length) report(problems.join(' ')); await loadEdgeSettings().then(configureEdge); await surfaces.load() }).catch(report)
     let linySince = 0, linyArmed = true, closeSince = 0, notchSince = 0, leaveSince = 0
     if (process.env.GPUIX_BACKGROUND !== '1') try { speech() } catch (cause) { report(cause) }
@@ -189,17 +204,17 @@ function App() {
         } catch (cause) { report(cause) }
       }
       const now = Date.now(), current = surfaceRef.current, settings = layoutRef.current
-      if (process.env.GPUIX_BACKGROUND === '1') return
+      if (process.env.GPUIX_BACKGROUND === '1' && process.env.BUDDYMAC_VERIFY_SURFACES !== '1') return
       const visible = windowVisible(), edge = getEdgeState()
       if (current === 'main' && !visible) { traceSurface('main -> hidden (window closed)'); surfaceRef.current = 'hidden'; setSurface('hidden'); setEdgeFilesActive(true); return }
-      if (current === 'files' && !edge.revealed) { traceSurface('files -> hidden (shelf hid)'); surfaceRef.current = 'hidden'; setSurface('hidden'); return }
-      if (current === 'hidden' && edge.revealed) { traceSurface('hidden -> files (shelf shown)'); surfaceRef.current = 'files'; setSurface('files'); return }
+      if (current === 'files' && !edge.revealed && !edge.requested) { dismissFloating(); return }
+      if ((current === 'hidden' || current === 'main') && edge.requested) { change('files'); return }
       if (current === 'hidden' && visible && !edge.active) { traceSurface('hidden -> main (window reappeared)'); surfaceRef.current = 'main'; setSurface('main'); return }
       const watchMain = current === 'main' && (settings.focusNotch || settings.linySidebar.enabled)
       const pointer = current === 'hidden' || current === 'liny' || current === 'notch' || watchMain ? pointerState() : null
       // With the window open, the edges still work as long as the pointer is not over BuddyMac itself.
-      if (pointer && (current === 'hidden' || (current === 'main' && outsideWindow(pointer, 0))) && !pointer.down) {
-        if (settings.linySidebar.enabled && linyZone(pointer, settings.linySidebar)) { if (!linySince) linySince = now; else if (linyArmed && now - linySince >= 350) { linySince = 0; linyArmed = false; closeSince = 0; change('liny') } }
+      if (pointer && (current === 'hidden' || current === 'main') && !pointer.down) {
+        if (settings.linySidebar.enabled && outsideWindow(pointer, 0) && linyZone(pointer, settings.linySidebar)) { if (!linySince) linySince = now; else if (linyArmed && now - linySince >= 350) { linySince = 0; linyArmed = false; closeSince = 0; change('liny') } }
         else { linySince = 0; linyArmed = true }
         if (settings.focusNotch && notchZone(pointer)) { if (!notchSince) notchSince = now; else if (now - notchSince >= 120) { notchSince = 0; leaveSince = 0; notchArmed = true; change('notch') } } else notchSince = 0
       }

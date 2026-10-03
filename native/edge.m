@@ -25,12 +25,9 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
 @property(nonatomic) BOOL filesActive;
 @property(nonatomic) BOOL active;
 @property(nonatomic) BOOL revealed;
+@property(nonatomic) BOOL requested;
 @property(nonatomic) BOOL dismissed;
 @property(nonatomic) double holdDelay;
-@property(nonatomic) NSRect normalFrame;
-@property(nonatomic) NSSize normalMinSize;
-@property(nonatomic) NSInteger normalLevel;
-@property(nonatomic) BOOL normalMovable;
 @property(nonatomic) NSTimeInterval lastInside;
 @property(nonatomic) NSTimeInterval downSince;
 @property(nonatomic) NSPoint downPoint;
@@ -51,17 +48,13 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
 - (void)revealOn:(NSScreen *)screen {
     if (!screen || !self.active) return;
     self.displayID = screen.deviceDescription[@"NSScreenNumber"];
-    // Hide before repositioning so a shelf never flashes across neighboring screens.
-    if (self.revealed && !NSContainsRect(screen.visibleFrame, self.window.frame)) [self.window orderOut:nil];
-    [self.window setFrame:shelfFrame(screen.visibleFrame, self.side) display:YES];
-    self.window.alphaValue = 1;
-    [self.window orderFrontRegardless];
-    self.revealed = YES;
+    // React prepares the shelf before the panel controller presents the window.
+    self.requested = YES;
     self.dismissed = NO;
     self.lastInside = NSDate.timeIntervalSinceReferenceDate;
 }
 - (void)didDismiss:(NSNotification *)notification {
-    if (notification.object == self.window) { self.dismissed = YES; self.revealed = NO; }
+    if (notification.object == self.window) { self.dismissed = YES; self.revealed = NO; self.requested = NO; }
 }
 - (void)reconcile {
     if (!self.window) {
@@ -72,31 +65,20 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
     if (!self.window) return;
     BOOL next = self.side != 0 && self.filesActive;
     if (next && !self.active) {
-        self.normalFrame = self.window.frame;
-        self.normalMinSize = self.window.minSize;
-        self.normalLevel = self.window.level;
-        self.normalMovable = self.window.movable;
-        self.window.minSize = NSMakeSize(240, 240);
-        self.window.level = NSFloatingWindowLevel;
-        self.window.movable = NO;
         self.active = YES;
         self.revealed = NO;
         self.dismissed = NO;
-        [self.window orderOut:nil];
         if (self.pinned) [self revealOn:[self screenAt:NSEvent.mouseLocation]];
     } else if (!next && self.active) {
         self.active = NO;
         self.revealed = NO;
-        self.window.minSize = self.normalMinSize;
-        self.window.level = self.normalLevel;
-        self.window.movable = self.normalMovable;
-        [self.window orderOut:nil];
-        [self.window setFrame:self.normalFrame display:NO];
+        self.requested = NO;
     }
 }
 - (void)tick {
     [self reconcile];
     if (!self.active) return;
+    if (self.requested) return;
     NSPoint point = NSEvent.mouseLocation;
     NSScreen *screen = [self screenAt:point];
     if (!screen) return;
@@ -182,8 +164,16 @@ void buddymac_edge_show(void) {
     [edge revealOn:[edge screenAt:NSEvent.mouseLocation]];
 }
 
+void buddymac_edge_presented(void) {
+    edge.requested = NO;
+    edge.revealed = YES;
+    edge.lastInside = NSDate.timeIntervalSinceReferenceDate;
+}
+
+int buddymac_edge_side(void) { return (int)edge.side; }
+
 const char *buddymac_edge_state(void) {
-    NSDictionary *state = @{@"active": @(edge.active), @"revealed": @(edge.revealed), @"side": @(edge.side)};
+    NSDictionary *state = @{@"active": @(edge.active), @"revealed": @(edge.revealed), @"requested": @(edge.requested), @"side": @(edge.side)};
     NSData *data = [NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
     stateJSON = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     return stateJSON.UTF8String;

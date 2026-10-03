@@ -44,3 +44,20 @@ dist/verification/verification-pointer drag "$buddymac_window_id" "$target_windo
 The source coordinate must be a visible file row inside the specified BuddyMac window. The receiver drop center is calculated from its fixed layout. Both points must be unobscured and the receiver center must lie outside the BuddyMac window. The command requires existing Accessibility and event-posting access, checks that no mouse button is already held, and never requests permission. It sends a real left-down/drag/up sequence and restores the original pointer position afterward. It reports coordinates only, not success of file delivery. Verify `state.json` has a new accepted drop with matching copied digests, then verify BuddyMac shelf removal independently. Run serially while no human or other agent is using the pointer.
 
 The implementation agent compiled and signature-verified the pointer binary without executing it.
+
+## Sidebar and notch hover checks
+
+`verification-pointer hover <BuddyMac-pid> <right|left|notch|away> <seconds>`
+moves the pointer to a fixed zone on the main display and restores it afterward.
+It accepts only a running packaged BuddyMac process, requires existing event-posting
+and Accessibility access, refuses held mouse buttons, and limits each hold to 20 seconds.
+Run serially while no one else is using the pointer.
+
+`bun scripts/verify-surfaces.ts [output-directory]` starts the packaged app with
+isolated Files, Focus and speech stores. It prints its PID and command-file path.
+While hovering, write `{ "action": "check", "name": "sidebar-main-open",
+"testId": "file-Sidebar verification.txt" }` to the command file to capture and
+verify the shelf. Use `focus-panel` for notch checks. Close the fixture window
+through its native close control and repeat both checks. Write `{ "action": "stop" }`
+to finish the recording. Results, screenshots, window transitions and the recording
+are saved in the output directory. Recordings capture only BuddyMac's native window.

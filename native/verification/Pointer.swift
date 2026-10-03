@@ -30,7 +30,7 @@ func windows() -> [Window] {
     return raw.compactMap { item in
         guard let pid = item[kCGWindowOwnerPID as String] as? Int32, let app = scopedApp(pid),
               let id = item[kCGWindowNumber as String] as? UInt32,
-              let layer = item[kCGWindowLayer as String] as? Int, layer == 0 || layer == NSWindow.Level.floating.rawValue,
+              let layer = item[kCGWindowLayer as String] as? Int, layer == 0 || layer == NSWindow.Level.floating.rawValue || layer == NSWindow.Level.statusBar.rawValue,
               let data = item[kCGWindowBounds as String] as? [String: Any],
               let rect = CGRect(dictionaryRepresentation: data as CFDictionary), rect.width > 100, rect.height > 80 else { return nil }
         return Window(id: id, pid: pid, app: app, title: item[kCGWindowName as String] as? String ?? "", x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
@@ -50,6 +50,26 @@ let args = CommandLine.arguments
 guard AXIsProcessTrusted() else { fail("Accessibility access is required; no permission prompt was opened") }
 if args.count == 2, args[1] == "list" {
     printJSON(windows())
+    exit(0)
+}
+if args.count == 5, args[1] == "hover", let pid = Int32(args[2]), scopedApp(pid) == "buddymac",
+   let seconds = Double(args[4]), seconds >= 0.2, seconds <= 20 {
+    guard CGPreflightPostEventAccess() else { fail("Event posting access is required; no permission prompt was opened") }
+    guard !CGEventSource.buttonState(.combinedSessionState, button: .left), !CGEventSource.buttonState(.combinedSessionState, button: .right) else { fail("Release the mouse buttons before hovering") }
+    guard let screen = NSScreen.screens.first, let original = CGEvent(source: nil)?.location else { fail("No display or pointer available") }
+    let frame = screen.frame
+    let point: CGPoint
+    switch args[3] {
+    case "right": point = CGPoint(x: frame.maxX - 2, y: frame.height / 2)
+    case "left": point = CGPoint(x: frame.minX + 2, y: frame.height / 2)
+    case "notch": point = CGPoint(x: frame.midX, y: frame.maxY - screen.visibleFrame.maxY + 6)
+    case "away": point = CGPoint(x: frame.midX, y: frame.height - 10)
+    default: fail("Hover zone must be right, left, notch or away")
+    }
+    defer { event(.mouseMoved, original) }
+    event(.mouseMoved, point)
+    Thread.sleep(forTimeInterval: seconds)
+    printJSON(["pid": Double(pid), "x": point.x, "y": point.y, "seconds": seconds])
     exit(0)
 }
 guard args.count == 6, args[1] == "drag", let sourceID = UInt32(args[2]), let destinationID = UInt32(args[3]),

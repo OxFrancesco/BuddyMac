@@ -11,6 +11,7 @@ const target = join(destination, 'BuddyMac.app');
 const backup = join(destination, '.buddymac-previous.app');
 const oldApp = resolve(process.argv[2] ?? `${process.env.HOME}/Applications/BuddyMac.app`);
 const cli = resolve('packages/buddymac/cli.mjs');
+const release = JSON.parse(await readFile(resolve('packages/buddymac/release.json')));
 const out = resolve('evidence/installer-update');
 await mkdir(destination); await mkdir(out, { recursive: true });
 const env = { ...process.env, GPUIX_BACKGROUND: '1', LINY_MOCK: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LINY_HOME: join(root, 'liny') };
@@ -19,7 +20,8 @@ function run(command, args) {
   assert.equal(p.status, 0, p.stderr); return p.stdout.trim();
 }
 const version = app => run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', join(app, 'Contents/Info.plist')]);
-assert.equal(version(oldApp), '0.1.3', 'Use a real signed 0.1.3 app as the upgrade source.');
+const oldVersion = version(oldApp);
+assert.notEqual(oldVersion, release.version, 'Use an older signed app as the upgrade source.');
 run('/usr/bin/ditto', [oldApp, target]);
 const originalInode = (await stat(target)).ino;
 const client = new SpeechClient({ dataDirectory: env.BUDDYMAC_SPEECH_DATA_DIR });
@@ -78,18 +80,18 @@ try {
   await app.close(); app = undefined;
   const rolledBack = await failed.done;
   assert.equal(rolledBack.code, 1); assert(rolledBack.output.includes('previous app was restored'));
-  assert.equal((await stat(target)).ino, originalInode); assert.equal(version(target), '0.1.3');
+  assert.equal((await stat(target)).ino, originalInode); assert.equal(version(target), oldVersion);
   await cleanTransaction(); checks.push('A real filesystem replacement failure restores the old signed app');
 
   await openFixture('after-rollback');
   const update = install('upgrade'); await update.waiting();
-  assert.equal(version(target), '0.1.3');
+  assert.equal(version(target), oldVersion);
   await app.close(); app = undefined;
   assert.equal((await update.done).code, 0);
-  assert.equal(version(target), '0.1.5'); assert.equal(version(backup), '0.1.3');
+  assert.equal(version(target), release.version); assert.equal(version(backup), oldVersion);
   assert.equal(await readFile(join(env.BUDDYMAC_SPEECH_DATA_DIR, 'settings.json'), 'utf8'), dataBefore);
   run('/usr/sbin/spctl', ['--assess', '--type', 'execute', target]);
-  checks.push('Real 0.1.3 to 0.1.5 upgrade waits for quit, passes Gatekeeper and preserves settings');
+  checks.push(`Real ${oldVersion} to ${release.version} upgrade waits for quit, passes Gatekeeper and preserves settings`);
   await openFixture('after-update'); await app.close(); app = undefined;
 
   const installedInode = (await stat(target)).ino;
@@ -101,7 +103,8 @@ try {
   const invalidPackage = join(root, 'invalid-package');
   await cp(resolve('packages/buddymac'), invalidPackage, { recursive: true });
   const manifest = JSON.parse(await readFile(join(invalidPackage, 'release.json')));
-  await writeFile(join(invalidPackage, 'release.json'), JSON.stringify({ ...manifest, version: '0.1.6', sha256: '0'.repeat(64) }));
+  const nextVersion = release.version.replace(/\d+$/, patch => String(Number(patch) + 1));
+  await writeFile(join(invalidPackage, 'release.json'), JSON.stringify({ ...manifest, version: nextVersion, sha256: '0'.repeat(64) }));
   const rejected = await install('bad-checksum', join(invalidPackage, 'cli.mjs')).done;
   assert.equal(rejected.code, 1); assert(rejected.output.includes('checksum mismatch'));
   assert.equal((await stat(target)).ino, installedInode);

@@ -14,7 +14,7 @@ export interface SurfaceSettings {
 export const defaultSurfaces: SurfaceSettings = {
   linySidebar: { enabled: false, edge: 'right', zone: 'middle' },
   linyShortcuts: { open: null, capture: null },
-  focusNotch: false,
+  focusNotch: true,
   focusMenuBar: true,
   talkPill: true,
 }
@@ -39,7 +39,7 @@ function parse(value: unknown): SurfaceSettings {
       zone: zones.find(zone => zone === sidebar.zone) ?? 'middle',
     },
     linyShortcuts: { open: shortcut(shortcuts.open), capture: shortcut(shortcuts.capture) },
-    focusNotch: item.focusNotch === true,
+    focusNotch: item.focusNotch !== false,
     focusMenuBar: item.focusMenuBar !== false,
     talkPill: item.talkPill !== false,
   }
