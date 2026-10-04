@@ -57,7 +57,7 @@ try{
  for(const name of ['history','memory','settings']){await tab('liny',name);await shot(`liny-${name}`)}
  await tab('liny','chat')
  await app.getByTestId('nav-Settings').click();await Bun.sleep(500);await shot('settings-general')
- for(const name of ['permissions','shortcuts','original-apps']){await tab('settings',name);await Bun.sleep(800);await shot(`settings-${name}`)}
+ for(const name of ['ai','permissions','shortcuts','original-apps']){await tab('settings',name);await Bun.sleep(800);await shot(`settings-${name}`)}
  await app.getByTestId('nav-search').click();await app.getByTestId('palette-input').waitFor();await app.getByTestId('palette-input').fill('dict');await shot('palette')
  await app.getByTestId('palette-item-0').click();await Bun.sleep(400);await shot('palette-result')
  await app.getByTestId('nav-Talk').click();await Bun.sleep(500);await app.getByTestId('talk-compact').click();await app.getByTestId('compact-talk').waitFor();await shot('compact-talk');await app.getByTestId('compact-expand').click()

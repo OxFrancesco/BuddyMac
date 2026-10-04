@@ -7,7 +7,7 @@ export const tabs = {
   Focus: ['Tasks', 'History', 'Check-ins', 'Settings'],
   Dock: ['Icons', 'New pack', 'Settings'],
   Liny: ['Chat', 'History', 'Memory', 'Settings'],
-  Settings: ['General', 'Permissions', 'Shortcuts', 'Original apps'],
+  Settings: ['General', 'AI', 'Permissions', 'Shortcuts', 'Original apps'],
 } as const
 export type Section = keyof typeof tabs
 export type Tab<S extends Section> = typeof tabs[S][number]

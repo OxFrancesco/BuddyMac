@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGpuix } from '@gpuix/react'
-import { applyDockIcons, createDockPack, dockFailureMessage, dockStatus, getManaged, iconPreview, listDockApps, loadCurrentPack, loadSavedDockPack, refreshDock, relaunchApp, resetDockIcons, setCurrentPack, setManaged, type DockApp, type DockResult, type SavedDockPack } from './dock'
+import { applyDockIcons, createDockPack, generateDockIcon, dockFailureMessage, dockStatus, getManaged, iconPreview, listDockApps, loadCurrentPack, loadSavedDockPack, refreshDock, relaunchApp, resetDockIcons, setCurrentPack, setManaged, type DockApp, type DockResult, type SavedDockPack } from './dock'
 import { openSettingsPane } from './platform'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
 import { tabs, useTab } from './nav'
+import { nav } from './nav'
 import { Button, C, Column, Empty, ErrorText, Field, Group, Intro, Labeled, Row, Setting, TabbedPage, Text, space } from './ui'
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
@@ -99,16 +100,27 @@ export function DockView() {
 type Renderer = ReturnType<typeof useGpuix>['renderer']
 function NewPack({ apps, busy, run, renderer, onCreated }: { apps: DockApp[]; busy: boolean; run: (work: () => Promise<void>) => Promise<void>; renderer: Renderer; onCreated: (pack: SavedDockPack) => void }) {
   const [name, setName] = useState(''), [images, setImages] = useState<Record<string, string>>({})
+  const [style, setStyle] = useState(''), [generating, setGenerating] = useState('')
+  const [creating, setCreating] = useState(false)
+  const generation = useRef<AbortController | null>(null)
+  useEffect(() => () => generation.current?.abort(), [])
   const chosen = apps.filter(app => images[app.appPath])
   return <>
-    <Intro text="Pick artwork for each app in your Dock. PNG or JPEG, ideally square and 1024 pixels. BuddyMac turns them into macOS icons." />
-    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Pack name"><Field id="dock-pack-name" value={name} onChange={setName} placeholder="Claymation" /></Labeled><Button id="dock-create-pack" primary disabled={busy || !name.trim() || !chosen.length} onClick={() => void run(async () => onCreated(await createDockPack(name, chosen.map(app => ({ app, imagePath: images[app.appPath]! })))))}>{busy ? 'Creating' : 'Create pack'}</Button></Row>
+    <Intro text="Choose artwork or generate it for each app, then create the icon pack." />
+    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Icon style"><Field id="dock-icon-style" value={style} onChange={setStyle} placeholder="Monochrome clay, soft lighting" /></Labeled>{generating ? <Button id="dock-cancel-generation" onClick={() => generation.current?.abort()}>Cancel generation</Button> : <Button id="dock-image-settings" onClick={() => nav.go('Settings', 'AI')}>Image model</Button>}</Row>
+    <Text muted size={11}>Generation uses OpenRouter credits. Pi cannot use ChatGPT's image quota.</Text>
+    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Pack name"><Field id="dock-pack-name" value={name} onChange={setName} placeholder="Claymation" /></Labeled><Button id="dock-create-pack" primary disabled={busy || !name.trim() || !chosen.length} onClick={() => void run(async () => { setCreating(true); try { onCreated(await createDockPack(name, chosen.map(app => ({ app, imagePath: images[app.appPath]! })))) } finally { setCreating(false) } })}>{creating ? 'Creating' : 'Create pack'}</Button></Row>
     <Column style={{ gap: 0 }}>
       {apps.map(app => <Row key={app.appPath} style={{ flexShrink: 0, paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, borderBottomWidth: 1, borderColor: C.line }}>
         <img src={app.iconPath} objectFit="contain" style={{ width: 36, height: 36, flexShrink: 0 }} />
         {images[app.appPath] ? <img src={images[app.appPath]} objectFit="contain" style={{ width: 36, height: 36, flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, flexShrink: 0, borderWidth: 1, borderColor: C.line }} />}
         <Column style={{ flexGrow: 1, gap: 4 }}><Text>{app.name}</Text><Text muted size={11}>{images[app.appPath]?.split('/').at(-1) ?? 'No artwork'}</Text></Column>
         <Row style={{ gap: 0 }}>
+          <Button id={`dock-generate-${app.id}`} quiet disabled={busy || !style.trim()} onClick={() => void run(async () => {
+            const controller = new AbortController(); generation.current = controller; setGenerating(app.appPath)
+            try { const path = await generateDockIcon(app, style, controller.signal); if (!controller.signal.aborted) setImages(previous => ({ ...previous, [app.appPath]: path })) }
+            finally { generation.current = null; setGenerating('') }
+          })}>{generating === app.appPath ? 'Generating' : 'Generate'}</Button>
           {images[app.appPath] ? <Button quiet onClick={() => setImages(({ [app.appPath]: _, ...rest }) => rest)}>Remove</Button> : null}
           <Button quiet onClick={() => void run(async () => { const paths = await renderer?.promptForPaths?.({ files: true, directories: false, multiple: false }); const path = paths?.[0]; if (path) setImages(previous => ({ ...previous, [app.appPath]: path })) })}>Choose image</Button>
         </Row>

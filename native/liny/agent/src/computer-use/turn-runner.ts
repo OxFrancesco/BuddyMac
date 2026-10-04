@@ -118,12 +118,11 @@ export class ComputerTurnRunner {
 					: this.models.streamSimple(model, context, options);
 			const messages = await runAgentLoopContinue(
 				{
-					systemPrompt: browser ? `${input.systemPrompt}\n${COMPUTER_USE_PROMPT}\nCurrent macOS default browser: ${JSON.stringify(browser)}` : `${input.systemPrompt}\nComputer tools are disabled for this turn. Answer using the conversation only.`,
-					messages: input.messages,
+                    messages: [{ role: 'system', content: browser ? `${input.systemPrompt}\n${COMPUTER_USE_PROMPT}\nCurrent macOS default browser: ${JSON.stringify(browser)}` : `${input.systemPrompt}\nComputer tools are disabled for this turn. Answer using the conversation only.`, timestamp: Date.now() }, ...input.messages],
 					tools: input.tools === "none" ? [] : toolSet.tools,
 				},
 				{
-					model: input.model,
+                    model: input.model,
 					reasoning: input.thinking,
 					convertToLlm: (messages) => boundComputerScreenshots(messages.filter(isMessage)),
 					toolExecution: "sequential",

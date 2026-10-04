@@ -229,7 +229,7 @@ function SettingsTab({ draft, edit, memory, keyConfigured, localModel, screenAll
   const ownModel = localModel.includes('/BuddyMac/')
   return <>
     <Group title="Account">
-      <Setting label="OpenRouter key" detail={keyConfigured ? 'Saved in Keychain. Used for transcription, cleanup and Write.' : 'Needed for transcription, cleanup and Write.'}>
+      <Setting label="OpenRouter key" detail={keyConfigured ? 'Saved in Keychain. Used for audio transcription.' : 'Needed for audio transcription.'}>
         <Button id="talk-key" onClick={() => { const value = promptSecret(); if (value) void act(async () => { await speech().setKey({ provider: 'openRouter', value }); await refresh() }) }}>{keyConfigured ? 'Replace key' : 'Set API key'}</Button>
         {keyConfigured ? <Button onClick={() => void act(async () => { await speech().removeKey(); await refresh() })}>Remove</Button> : null}
       </Setting>
@@ -237,7 +237,7 @@ function SettingsTab({ draft, edit, memory, keyConfigured, localModel, screenAll
     <Group title="Transcription">
       <Setting label="Spoken language" detail="Local cleanup needs English."><Choice id="talk-language" value={draft.language} items={languages} onChange={language => edit(value => ({ ...value, language }))} /></Setting>
       <Setting label="Clean up my dictation" detail="Removes fillers and fixes punctuation with the cloud model."><Check id="talk-cleanup" label={draft.cleanupEnabled ? 'On' : 'Off'} checked={draft.cleanupEnabled} onChange={flag('cleanupEnabled')} /></Setting>
-      <Setting label="Cloud cleanup model" detail="Used to clean up dictated text."><div style={{ width: 280 }}><Field id="talk-cleanup-model" value={draft.cleanupModel} onChange={cleanupModel => edit(value => ({ ...value, cleanupModel }))} placeholder="OpenRouter model ID" /></div></Setting>
+      <Setting label="Cloud cleanup model" detail="OpenRouter model ID. A connected ChatGPT provider uses the model in AI settings."><div style={{ width: 280 }}><Field id="talk-cleanup-model" value={draft.cleanupModel} onChange={cleanupModel => edit(value => ({ ...value, cleanupModel }))} placeholder="OpenRouter model ID" /></div></Setting>
       <Setting label="Clean up English on this Mac" detail={localModel ? 'S1-mini by Superwhisper is downloaded.' : 'Downloads S1-mini by Superwhisper, 462 MiB. Audio still goes to OpenRouter.'}>
         {localModel ? <Check id="talk-local-cleanup" label={draft.localCleanupEnabled ? 'On' : 'Off'} checked={draft.localCleanupEnabled} onChange={flag('localCleanupEnabled')} />
           : downloading ? <Button onClick={() => void act(() => speech().cancelLocalDownload())}>Cancel download</Button>

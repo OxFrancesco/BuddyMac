@@ -11,6 +11,7 @@ import { useSurfaces } from './surfaces'
 import { nav, sections, tabs, useTab, type Section } from './nav'
 import { formatShortcut, fromCarbon, fromCocoa } from './shortcuts'
 import { Button, Check, ErrorText, Group, Row, Setting, TabbedPage, Text } from './ui'
+import { InferenceSettingsView } from './inference-view'
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
 
@@ -21,6 +22,7 @@ export function SettingsView() {
   return <TabbedPage id="settings" title="Settings" items={tabs.Settings} tab={tab} onTab={setTab}>
     <ErrorText message={error} />
     {tab === 'General' ? <General run={run} /> : null}
+    {tab === 'AI' ? <InferenceSettingsView /> : null}
     {tab === 'Permissions' ? <Permissions run={run} /> : null}
     {tab === 'Shortcuts' ? <Shortcuts /> : null}
     {tab === 'Original apps' ? <Originals run={run} setError={setError} /> : null}
@@ -43,8 +45,7 @@ function General({ run }: { run: (work: () => Promise<unknown>) => Promise<void>
       <Setting label="Focus timer under the notch" detail={layout.focusNotch ? 'Hover the notch to see the timer.' : 'Off'}><Button onClick={() => nav.go('Focus', 'Settings')}>Focus settings</Button></Setting>
     </Group>
     <Group title="Account">
-      <Setting label="OpenRouter key" detail={s.status?.keyConfigured ? 'Saved in Keychain. Talk and Write use it.' : 'Needed for Talk and Write.'}><Button onClick={() => nav.go('Talk', 'Settings')}>Manage key</Button></Setting>
-      <Setting label="Liny provider" detail="Codex, OpenRouter or Z.AI."><Button onClick={() => nav.go('Liny', 'Settings')}>Manage provider</Button></Setting>
+      <Setting label="AI providers" detail="ChatGPT subscription, OpenRouter and Dock image generation."><Button id="settings-ai" onClick={() => nav.go('Settings', 'AI')}>Manage providers</Button></Setting>
     </Group>
   </>
 }

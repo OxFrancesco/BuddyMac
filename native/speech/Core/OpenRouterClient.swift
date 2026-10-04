@@ -189,6 +189,9 @@ public struct OpenRouterClient: Sendable {
     }
 
     private func complete(system: String, input: String, model: String, operation: String, screenshot: Data? = nil) async throws -> String {
+        if InferenceBridge.enabled {
+            return try await InferenceBridge.shared.complete(system: system, input: input, model: model, screenshot: screenshot)
+        }
         try validateModel(model)
         var request = try authorizedRequest(path: "chat/completions")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

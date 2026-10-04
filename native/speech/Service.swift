@@ -20,6 +20,7 @@ struct Command: Decodable {
     var name: String?
     var instruction: String?
     var needs: [String]?
+    var token: String?
 }
 
 @MainActor
@@ -131,6 +132,8 @@ final class SpeechService {
     private func handle(_ command: Command) async {
         do {
             switch command.method {
+            case "inferenceReply":
+                if let token = command.token { InferenceBridge.shared.resolve(token: token, text: command.text, error: command.value) }
             case "status": reply(command.id, try status())
             case "preferences": reply(command.id, try json(storage.data.preferences))
             case "savePreferences":
@@ -306,7 +309,7 @@ final class SpeechService {
                 operation = Task { [weak self] in
                     guard let self else { return }
                     do {
-                        let client = OpenRouterClient(apiKey: try keys.read())
+                        let client = OpenRouterClient(apiKey: InferenceBridge.enabled ? "" : try keys.read())
                         let result = try await client.rewrite(source, instruction: profile.instruction,
                                                               model: profile.openRouterModelID ?? storage.writeModel)
                         try Task.checkCancellation()

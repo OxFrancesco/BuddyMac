@@ -7,6 +7,8 @@ import { zaiProvider } from "@earendil-works/pi-ai/providers/zai";
 import { FileCredentialStore } from "./authstore.ts";
 import { fastStreamOptions } from "./fast-stream.ts";
 import { AUTH_FILE } from "./paths.ts";
+import { durableModels } from '../../../../src/durable-models';
+import { dirname, join } from 'node:path';
 import { defaultModelFor, PROVIDER_IDS, type ModelSelection, type ProviderId } from "./provider-config.ts";
 
 registerBunOAuthFlows();
@@ -58,14 +60,14 @@ export function createRuntime(authPath = AUTH_FILE) {
 			);
 		};
 		faux.setResponses(Array.from({ length: 10_000 }, () => echo));
-		return models;
+        return durableModels(models, join(dirname(authPath), 'inference'));
 	}
 	const credentials = new FileCredentialStore(authPath);
 	const models = createModels({ credentials });
 	models.setProvider(openaiCodexProvider());
 	models.setProvider(openrouterProvider());
 	models.setProvider(zaiProvider());
-	return models;
+    return durableModels(models, join(dirname(authPath), 'inference'));
 }
 
 export function resolveModel(models: ReturnType<typeof createRuntime>, selection: ModelSelection): Model<Api> {

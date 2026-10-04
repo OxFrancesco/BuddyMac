@@ -6,6 +6,7 @@ import { setSpeechShortcuts } from './speech-shortcuts'
 import { copyText, nativeKeyLabel, promptSecret } from './platform'
 import { nav, tabs, useTab } from './nav'
 import { formatShortcut, fromCocoa, hasModifier, toCocoa, type RecordedShortcut } from './shortcuts'
+import { useInference } from './inference'
 import { Button, C, Check, Choice, Column, Empty, ErrorText, Field, Group, Intro, Row, Setting, ShortcutField, Stacked, TabbedPage, Text, space } from './ui'
 
 const templates = [
@@ -31,7 +32,7 @@ export function WriteView() {
   useEffect(() => { void run(async () => {}) }, [])
   return <TabbedPage id="write" title="Write" items={tabs.Write} tab={tab} onTab={setTab}>
     <ErrorText message={error || s.error} />
-    {s.status && !s.status.keyConfigured ? <Setting label="OpenRouter key required" detail="Write uses the same key as Talk."><Button id="write-set-key" onClick={() => { const value = promptSecret(); if (value) void run(() => speech().setKey({ provider: 'openRouter', value })) }}>Set API key</Button></Setting> : null}
+    {s.status && !s.status.textConfigured ? <Setting label="Connect a text provider" detail="Use your ChatGPT subscription or an OpenRouter key."><Button id="write-set-key" onClick={() => nav.go('Settings', 'AI')}>Manage providers</Button></Setting> : null}
     {tab === 'Rewrite' ? <RewriteTab s={s} profiles={data?.profiles ?? s.status?.profiles ?? []} /> : null}
     {tab === 'Profiles' && data ? <ProfilesTab data={data} run={run} /> : null}
     {tab === 'Notes' && data ? <NotesTab data={data} run={run} /> : null}
@@ -40,6 +41,7 @@ export function WriteView() {
 }
 
 function RewriteTab({ s, profiles }: { s: ReturnType<typeof useSpeech>; profiles: WritingProfile[] }) {
+  const ai = useInference()
   const [input, setInput] = useSticky('write-input', ''), [output, setOutput] = useSticky('write-output', ''), [profile, setProfile] = useSticky('write-profile', ''), [busy, setBusy] = useState(false)
   const revision = useRef(0)
   const active = profile || profiles[0]?.id || ''
@@ -54,7 +56,7 @@ function RewriteTab({ s, profiles }: { s: ReturnType<typeof useSpeech>; profiles
     <Row style={{ flexShrink: 0, justifyContent: 'space-between' }}>
       <Row>
         <Choice id="write-profile" width={220} value={active} items={profiles.map(item => ({ value: item.id, label: item.name }))} onChange={setProfile} />
-        <Text muted size={11}>{s.status?.writeProvider === 'openRouter' ? s.status.writeModel : 'Local model unavailable'}</Text>
+        <Text muted size={11}>{s.status?.writeProvider === 'openRouter' ? ai.settings.provider === 'openrouter' ? s.status.writeModel : ai.settings.model : 'Local model unavailable'}</Text>
       </Row>
       <Button id="write-rewrite" primary disabled={!input.trim() || busy} onClick={() => void rewrite()}>{busy ? 'Rewriting' : 'Rewrite'}</Button>
     </Row>
@@ -123,15 +125,16 @@ function NotesTab({ data, run }: { data: WritingState; run: (work: () => Promise
 }
 
 function SettingsTab({ data, shortcutsEnabled, run }: { data: WritingState; shortcutsEnabled: boolean; run: (work: () => Promise<unknown>) => Promise<void> }) {
+  const ai = useInference()
   const [model, setModel] = useState(data.settings.rewriteProvider.modelID)
   return <>
     <Group title="Rewriting">
-      <Setting label="Default model" detail="OpenRouter model ID. Profiles can override it."><div style={{ width: 260 }}><Field id="write-model" value={model} onChange={setModel} placeholder="OpenRouter model ID" /></div><Button id="write-save-model" disabled={model === data.settings.rewriteProvider.modelID} onClick={() => void run(() => speech().setWriteProvider({ kind: 'openRouter', modelID: model.trim() }))}>Save</Button></Setting>
+      {ai.settings.provider === 'openrouter' ? <Setting label="Default model" detail="OpenRouter model ID. Profiles can override it."><div style={{ width: 260 }}><Field id="write-model" value={model} onChange={setModel} placeholder="OpenRouter model ID" /></div><Button id="write-save-model" disabled={model === data.settings.rewriteProvider.modelID} onClick={() => void run(() => speech().setWriteProvider({ kind: 'openRouter', modelID: model.trim() }))}>Save</Button></Setting> : <Setting label="Text model" detail={ai.settings.model}><Button onClick={() => nav.go('Settings', 'AI')}>Change model</Button></Setting>}
       <Setting label="After rewriting selected text" detail="Applies when you use a profile shortcut in another app."><Choice id="write-output-mode" width={220} value={data.settings.outputMode} items={[{ value: 'replaceSelection', label: 'Replace the selection' }, { value: 'copyToClipboard', label: 'Copy to clipboard' }]} onChange={mode => void run(() => speech().setOutputMode(mode === 'copyToClipboard' ? 'copyToClipboard' : 'replaceSelection'))} /></Setting>
     </Group>
     <Group title="Shortcuts">
       <Setting label="Use profile and note shortcuts in every app" detail="Shared with Talk's shortcuts. Turn off BuddyWrite's shortcuts first."><Check id="write-shortcuts-enabled" label={shortcutsEnabled ? 'On' : 'Off'} checked={shortcutsEnabled} onChange={next => void run(() => setSpeechShortcuts(next))} /></Setting>
-      <Setting label="OpenRouter key" detail="Shared with Talk."><Button onClick={() => nav.go('Talk', 'Settings')}>Open Talk settings</Button></Setting>
+      <Setting label="Text provider"><Button onClick={() => nav.go('Settings', 'AI')}>Manage providers</Button></Setting>
     </Group>
   </>
 }

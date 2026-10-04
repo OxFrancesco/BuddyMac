@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { inference } from './inference';
 
 export type SpeechPhase = "idle" | "requestingPermission" | "recording" | "transcribing" | "formatting" | "inserting" | "success" | "failed";
 export type DictationStyle = "natural" | "casual" | "professional" | "verbatim";
@@ -32,6 +33,7 @@ export interface WritingProfile {
   hotkey?: WriteHotkey;
 }
 export interface SpeechStatus {
+  textConfigured?: boolean;
   phase: SpeechPhase;
   microphoneGranted: boolean;
   accessibilityGranted: boolean;
@@ -179,6 +181,7 @@ export interface SpeechClientOptions {
 }
 
 export class SpeechClient {
+  private readonly isolated: boolean;
   private readonly process: Bun.Subprocess<"pipe", "pipe", "pipe">;
   private readonly pending = new Map<number, PendingRequest>();
   private readonly onEvent: (event: SpeechEvent) => void;
@@ -186,6 +189,7 @@ export class SpeechClient {
   private closed = false;
 
   constructor(options: SpeechClientOptions = {}) {
+    this.isolated = !!options.dataDirectory && !process.env.BUDDYMAC_DATA_DIR;
     const binaryPath = options.binaryPath ?? process.env.BUDDYMAC_SPEECH_BINARY ?? [
       join(dirname(process.execPath), "buddymac-speech"),
       resolve(import.meta.dir, "../MacOS/buddymac-speech"),
@@ -196,7 +200,7 @@ export class SpeechClient {
     this.onEvent = options.onEvent ?? (() => {});
     this.process = Bun.spawn([binaryPath], {
       stdin: "pipe", stdout: "pipe", stderr: "pipe",
-      env: { ...process.env, BUDDYMAC_UI_PID: String(process.pid), ...(options.dataDirectory ? { BUDDYMAC_SPEECH_DATA_DIR: options.dataDirectory } : {}) },
+      env: { ...process.env, BUDDYMAC_PI_BRIDGE: this.isolated ? '0' : '1', BUDDYMAC_UI_PID: String(process.pid), ...(options.dataDirectory ? { BUDDYMAC_SPEECH_DATA_DIR: options.dataDirectory } : {}) },
     });
     void this.readOutput();
     void this.process.stderr.pipeTo(new WritableStream({ write() {} })).catch(() => {});
@@ -206,7 +210,13 @@ export class SpeechClient {
     });
   }
 
-  async status(): Promise<SpeechStatus> { return parseStatus(await this.request("status")); }
+  async status(): Promise<SpeechStatus> {
+    const status = parseStatus(await this.request("status"));
+    if (this.isolated) { status.textConfigured = status.keyConfigured; return status; }
+    await inference.load();
+    status.textConfigured = inference.get().settings.provider === 'openrouter' ? status.keyConfigured : inference.get().connected;
+    return status;
+  }
   async preferences(): Promise<SpeechPreferences> { return parsePreferences(await this.request("preferences")); }
   async savePreferences(preferences: SpeechPreferences): Promise<SpeechPreferences> { return parsePreferences(await this.request("savePreferences", { preferences })); }
   async memory(): Promise<string> { return string(record(await this.request("memory")).text); }
@@ -247,8 +257,8 @@ export class SpeechClient {
     const result = record(await this.request("captureSelection"));
     return { text: string(result.text), appName: string(result.appName) };
   }
-  async setKey(options: { provider: "openRouter"; value: string }): Promise<void> { await this.request("setKey", { value: options.value }); }
-  async removeKey(): Promise<void> { await this.request("removeKey"); }
+  async setKey(options: { provider: "openRouter"; value: string }): Promise<void> { await this.request("setKey", { value: options.value }); if (!this.isolated) await inference.refresh(); }
+  async removeKey(): Promise<void> { await this.request("removeKey"); if (!this.isolated) await inference.refresh(); }
   async setOutputMode(mode: WritingState["settings"]["outputMode"]): Promise<WritingState> { return parseWriting(await this.request("setOutputMode", { value: mode })); }
   async removeLocalModel(): Promise<void> { await this.request("removeLocalModel"); }
   async history(): Promise<SpeechHistoryEntry[]> { return array(await this.request("history"), parseHistory); }
@@ -260,6 +270,7 @@ export class SpeechClient {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    for (const controller of this.inferenceRequests.values()) controller.abort();
     this.process.stdin.end();
     this.rejectAll(new Error("Speech service closed."));
     const process = this.process;
@@ -305,6 +316,16 @@ export class SpeechClient {
 
   private receive(value: unknown): void {
     const item = record(value);
+    if (item.event === 'inferenceCancel') { this.inferenceRequests.get(string(item.token))?.abort(); return; }
+    if (item.event === 'inference') {
+      const token = string(item.token), controller = new AbortController();
+      this.inferenceRequests.set(token, controller);
+      void inference.text({ system: string(item.system), input: string(item.input), model: string(item.model), ...(typeof item.screenshot === 'string' ? { screenshot: item.screenshot } : {}), signal: controller.signal, requestId: token }).then(
+        text => { if (!this.closed) this.process.stdin.write(JSON.stringify({ id: 0, method: 'inferenceReply', token, text }) + '\n'); },
+        cause => { if (!this.closed) this.process.stdin.write(JSON.stringify({ id: 0, method: 'inferenceReply', token, value: cause instanceof Error ? cause.message : 'Inference failed.' }) + '\n'); },
+      ).finally(() => this.inferenceRequests.delete(token));
+      return;
+    }
     if (typeof item.id === "number") {
       const request = this.pending.get(item.id);
       if (!request) return;
@@ -315,9 +336,11 @@ export class SpeechClient {
     } else this.onEvent(parseEvent(item));
   }
   private rejectAll(error: Error): void {
+    for (const controller of this.inferenceRequests.values()) controller.abort();
     for (const request of this.pending.values()) { clearTimeout(request.timeout); request.reject(error); }
     this.pending.clear();
   }
+  private readonly inferenceRequests = new Map<string, AbortController>();
 }
 
 export function speechHistoryDate(entry: SpeechHistoryEntry): Date {

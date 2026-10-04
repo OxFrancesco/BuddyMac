@@ -2,6 +2,31 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { chmod, mkdir, rename } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { inference, inferenceEngine } from './inference';
+
+export async function generateDockIcon(app: DockApp, style: string, signal?: AbortSignal): Promise<string> {
+  const instruction = style.trim();
+  if (!instruction) throw new Error('Describe the icon style.');
+  await inference.load();
+  const preview = Bun.file(await iconPreview(app.iconPath));
+  let reference: import('@earendil-works/pi-ai').ImageContent | undefined;
+  if (await preview.exists() && preview.size <= 10 * 1024 * 1024) {
+    const mimeType = preview.type;
+    if (['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) reference = { type: 'image', mimeType, data: Buffer.from(await preview.arrayBuffer()).toString('base64') };
+  }
+  const output = await inferenceEngine().run({ kind: 'image', provider: 'openrouter', model: inference.get().settings.imageModel,
+    ...(reference ? { reference } : {}), prompt: `Create one square macOS Dock icon for ${JSON.stringify(app.name)}. Style: ${JSON.stringify(instruction)}. Keep the app recognizable${reference ? ' using its supplied original icon' : ''}. Use a centered composition with room around the edges. No text, labels, captions or icon grid. Return one image.` }, { signal });
+  if (output.kind !== 'image') throw new Error('The provider did not return an icon.');
+  const extensions: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+  const extension = extensions[output.image.mimeType];
+  if (!extension) throw new Error('The provider returned an unsupported image format.');
+  const directory = resolve(managedDirectory(), 'generated');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const path = resolve(directory, `${crypto.randomUUID()}.${extension}`);
+  await Bun.write(path, Buffer.from(output.image.data, 'base64'));
+  await chmod(path, 0o600);
+  return path;
+}
 
 export interface DockApp {
   id: string;

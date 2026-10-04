@@ -136,7 +136,7 @@ function messageText(message: Message): string {
 export function historyView(entries: SessionEntry[]): HistoryView {
 	const messages: HistoryMessage[] = [];
 	for (const message of buildContextMessages(entries)) {
-		if (message.role === "toolResult") continue;
+        if (message.role === "toolResult" || message.role === "system") continue;
 		if (typeof message.content === "string" && message.content.startsWith("<conversation-summary>")) continue;
 		const text = messageText(message)
 			.replace(/<conversation-summary>[\s\S]*?<\/conversation-summary>/g, "")
