@@ -88,14 +88,16 @@ export function TimerSection({ data, run, clockSize = 52 }: { data: FocusSnapsho
 }
 
 const TaskRow = memo(function TaskRow({ task, selected, run, onEdit }: { task: FocusTask; selected: boolean; run: Run; onEdit: () => void }) {
+  const [focused, setFocused] = useState(false)
+  const complete = () => void run(() => focus.completeTask(task.id, !task.isCompleted))
   const due = task.dueDate ? new Date(task.dueDate) : null
   const dueLabel = !due ? '' : sameDay(due, new Date()) ? 'TODAY' : overdue(task) ? 'OVERDUE' : shortDate(due).toUpperCase()
   return <Row testId={`task-${task.id}`} style={{ gap: 10, flexShrink: 0 }}>
-    <div testId={`complete-${task.id}`} role="checkbox" aria-label={task.isCompleted ? 'Mark task incomplete' : 'Mark task complete'} aria-checked={task.isCompleted} tabIndex={0} onClick={() => void run(() => focus.completeTask(task.id, !task.isCompleted))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, flexShrink: 0, cursor: 'pointer' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderWidth: 2, borderColor: C.text, backgroundColor: task.isCompleted ? C.text : C.bg }}>{task.isCompleted ? <text style={{ color: C.bg, fontSize: 10, fontWeight: 700 }}>✓</text> : null}</div>
+    <div testId={`complete-${task.id}`} role="checkbox" aria-label={task.isCompleted ? 'Mark task incomplete' : 'Mark task complete'} aria-checked={task.isCompleted} tabIndex={0} onClick={complete} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={event => { if (event.key === 'enter' || event.key === 'space') complete() }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', width: 44, minHeight: 44, flexShrink: 0, cursor: 'pointer', userSelect: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, flexShrink: 0, borderWidth: 2, borderColor: focused ? C.accent : C.text, backgroundColor: task.isCompleted ? C.text : C.bg, pointerEvents: 'none' }}>{task.isCompleted ? <text style={{ color: C.bg, fontSize: 10, fontWeight: 700, pointerEvents: 'none', userSelect: 'none' }}>✓</text> : null}</div>
     </div>
-    <div testId={`select-${task.id}`} role="button" aria-label={`Focus on ${task.title}`} tabIndex={0} onClick={() => void run(() => focus.selectTask(task.id))} style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0, gap: 4, padding: 10, borderWidth: selected ? 2 : 1, borderColor: selected ? C.text : '#333333', backgroundColor: selected ? '#1a1a1a' : C.bg, cursor: 'pointer', hover: { backgroundColor: '#141414' } }}>
-      <text style={{ fontSize: 13, color: task.isCompleted ? '#666666' : C.text, textDecoration: task.isCompleted ? 'line-through' : 'none' }}>{task.title}</text>
+    <div testId={`select-${task.id}`} role="button" aria-label={`Focus on ${task.title}`} tabIndex={0} onClick={() => void run(() => focus.selectTask(task.id))} style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0, gap: 6, padding: space.inset, borderWidth: selected ? 2 : 1, borderColor: selected ? C.text : '#333333', backgroundColor: selected ? '#1a1a1a' : C.bg, cursor: 'pointer', hover: { backgroundColor: '#141414' } }}>
+      <text style={{ fontSize: 14, color: task.isCompleted ? '#666666' : C.text, textDecoration: task.isCompleted ? 'line-through' : 'none' }}>{task.title}</text>
       <Row style={{ gap: 6 }}>
         <div style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 1, paddingBottom: 1, backgroundColor: priorityTint[task.priority] }}><text style={{ fontSize: 10, color: C.bg, fontWeight: 700 }}>{task.priority.toUpperCase()}</text></div>
         {dueLabel ? <Text size={10} style={{ color: overdue(task) ? C.accent : C.muted }}>{dueLabel}</Text> : null}
@@ -111,7 +113,7 @@ const TaskRow = memo(function TaskRow({ task, selected, run, onEdit }: { task: F
   </Row>
 }, (a, b) => a.task === b.task && a.selected === b.selected)
 
-export const TaskPanel = memo(function TaskPanel({ tasks, selected, run, onEdit, onNew, listHeight }: { tasks: FocusTask[]; selected?: string; run: Run; onEdit: (task: FocusTask) => void; onNew: (title: string) => void; listHeight?: number }) {
+export const TaskPanel = memo(function TaskPanel({ tasks, selected, run, onEdit, onNew }: { tasks: FocusTask[]; selected?: string; run: Run; onEdit: (task: FocusTask) => void; onNew: (title: string) => void }) {
   const data = { tasks, selectedTaskID: selected }
   const [draft, setDraft] = useState(''), [query, setQuery] = useState(''), [filter, setFilter] = useState<Filter>('today'), [confirmClear, setConfirmClear] = useState(false)
   const needle = query.trim().toLowerCase()
@@ -122,7 +124,7 @@ export const TaskPanel = memo(function TaskPanel({ tasks, selected, run, onEdit,
     if (await run(() => focus.addTask({ title, notes: '', projectName: '', tags: [], priority: 'p3', dueDate: todayISO() }))) setDraft('')
   }
   const empty = !data.tasks.length ? 'No tasks yet.' : needle ? 'No matches.' : 'Nothing here.'
-  return <Column style={{ gap: 12, flexGrow: 1, minHeight: 0 }}>
+  return <Column style={{ gap: 12, flexGrow: 1, flexBasis: 0, height: '100%', minHeight: 0, minWidth: 0 }}>
     <Row style={{ gap: 8, flexShrink: 0 }}>
       <Field id="task-quick-add" value={draft} onChange={setDraft} onSubmit={() => void add()} placeholder="New task" />
       <Button id="task-quick-add-button" primary disabled={!draft.trim()} onClick={() => void add()}>+</Button>
@@ -134,9 +136,9 @@ export const TaskPanel = memo(function TaskPanel({ tasks, selected, run, onEdit,
     </Row>
     <Row style={{ gap: 0, flexShrink: 0 }}><Field id="task-search" value={query} onChange={setQuery} placeholder="Search tasks" />{query ? <Button quiet onClick={() => setQuery('')}>Clear</Button> : null}</Row>
     {visible.length === 0 ? <div style={{ paddingTop: 20, paddingBottom: 20 }}><Text muted>{empty}</Text></div>
-      : <virtual-list testId="task-list" estimatedItemHeight={70} style={listHeight ? { height: listHeight, flexShrink: 0 } : { flexGrow: 1, minHeight: 0 }}>
-        {visible.map(task => <div key={task.id} style={{ paddingBottom: 6 }}><TaskRow task={task} selected={task.id === data.selectedTaskID} run={run} onEdit={() => onEdit(task)} /></div>)}
-      </virtual-list>}
+      : <div testId="task-list-viewport" style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, overflow: 'hidden' }}><virtual-list testId="task-list" estimatedItemHeight={82} style={{ height: '100%', width: '100%' }}>
+        {visible.map(task => <div key={task.id} style={{ paddingBottom: 12 }}><TaskRow task={task} selected={task.id === data.selectedTaskID} run={run} onEdit={() => onEdit(task)} /></div>)}
+      </virtual-list></div>}
   </Column>
 })
 
@@ -227,7 +229,7 @@ export const ActivityGraph = memo(function ActivityGraph({ sessions, width }: { 
     const date = model.dayAt(week, day)
     setHovered(previous => previous?.date.getTime() === date.getTime() ? previous : date > model.today ? null : { date, count: model.counts.get(date.getTime()) ?? 0 })
   }
-  return <Column style={{ gap: 8, flexShrink: 0 }}>
+  return <Column testId="focus-activity" style={{ gap: 8, flexShrink: 0 }}>
     <Row style={{ justifyContent: 'space-between' }}>
       <Text muted size={11}>Activity</Text>
       <Text muted size={11}>{hovered ? `${hovered.count} ${hovered.count === 1 ? 'session' : 'sessions'} · ${shortDate(hovered.date)}` : `${summary.streak > 0 ? `${summary.streak}d streak · ` : ''}${summary.minutes}m · ${summary.sessions} sessions this week`}</Text>
@@ -321,7 +323,7 @@ export function FocusPanel({ onExpand, onSettings, width }: { onExpand: () => vo
     </Row>
     <ErrorText message={state.error || state.alertError} />
     <Row style={{ alignItems: 'flex-start', gap: 24, paddingTop: 10, flexGrow: 1, minHeight: 0 }}>
-      <TaskPanel tasks={data.tasks} selected={data.selectedTaskID} run={runFocus} onEdit={openEditor} onNew={openNew} listHeight={280} />
+      <TaskPanel tasks={data.tasks} selected={data.selectedTaskID} run={runFocus} onEdit={openEditor} onNew={openNew} />
       <div style={{ width: rightWidth, flexShrink: 0 }}><TimerSection data={data} run={runFocus} /></div>
     </Row>
     <div style={{ height: 1, backgroundColor: '#262626', flexShrink: 0, marginTop: 16, marginBottom: 12 }} />
