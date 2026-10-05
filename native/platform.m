@@ -124,6 +124,7 @@ void buddymac_init(const char *fontDirectory) {
     }
 }
 void buddymac_menu(void) {
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     statusItem=[[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
     statusItem.button.image=[NSImage imageWithSystemSymbolName:@"square.grid.2x2" accessibilityDescription:@"BuddyMac"];
     NSMenu *menu=[NSMenu new];
@@ -355,5 +356,10 @@ const char *buddymac_pointer_state(void) {
 }
 
 void buddymac_hide_window(void) { if (platform.mainWindow) [platform.mainWindow orderOut:nil]; }
+void buddymac_show_window(void) {
+    [NSApp unhideWithoutActivation];
+    [NSApp activateIgnoringOtherApps:YES];
+    [platform.mainWindow makeKeyAndOrderFront:nil];
+}
 bool buddymac_window_visible(void) { return platform.mainWindow ? platform.mainWindow.visible : false; }
 bool buddymac_window_key(void) { return platform.mainWindow ? platform.mainWindow.keyWindow && NSApp.active : false; }

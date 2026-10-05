@@ -18,7 +18,7 @@ import { focusService, startFocusService, stopFocusService } from './focus-state
 import { focus } from './focus'
 import { FocusPanel, clock, notchPin, phaseTitle } from './notchflow'
 import { C, display, space, Text, ErrorText, Button } from './ui'
-import { hideWindow, windowKey, initializePlatform, installMenu, keepRunning, nextPlatformAction, pointerState, registerHotkeys, setStatusTitle, windowVisible, type PointerState } from './platform'
+import { hideWindow, showWindow, windowKey, initializePlatform, installMenu, keepRunning, nextPlatformAction, pointerState, registerHotkeys, setStatusTitle, windowVisible, type PointerState } from './platform'
 import { removeFiles } from './files'
 import { dockFailureMessage, reapplyManaged, refreshDock } from './dock'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
@@ -82,11 +82,11 @@ function outsideWindow(pointer: PointerState, margin: number) {
 function App() {
   const { section, paletteOpen } = useNav()
   const layout = useSurfaces()
-  const [surface, setSurface] = useState<Surface>('main')
+  const [surface, setSurface] = useState<Surface>(process.env.GPUIX_BACKGROUND === '1' ? 'main' : 'hidden')
   const [error, setError] = useState('')
   const [pending, setPending] = useState<Image | null>(null)
   const { renderer } = useGpuix()
-  const surfaceRef = useRef<Surface>('main'), layoutRef = useRef(layout)
+  const surfaceRef = useRef<Surface>(surface), layoutRef = useRef(layout)
   surfaceRef.current = surface; layoutRef.current = layout
   const report = (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))
   const size = useWindowSize()
@@ -119,7 +119,7 @@ function App() {
       if (next === 'hidden' || next === 'files' || next === 'main') setEdgeFilesActive(true)
     } catch (cause) { report(cause) }
   }
-  const openMain = (target?: Section) => { if (target) nav.go(target); change('main') }
+  const openMain = (target?: Section) => { if (target) nav.go(target); if (surfaceRef.current === 'main') showWindow(); change('main') }
   function dismissFloating() {
     traceSurface(`dismiss ${surfaceRef.current} to ${floatingReturn}`)
     if (floatingReturn !== 'main') { change('hidden'); return }
@@ -131,6 +131,7 @@ function App() {
     // Let GPUI paint the new content at its final size before revealing the window.
     const timer = setTimeout(() => {
       presentPanel()
+      if (surface === 'main' && process.env.GPUIX_BACKGROUND !== '1') showWindow()
       if (surface === 'files') edgePresented()
     }, 50)
     return () => clearTimeout(timer)
@@ -295,4 +296,4 @@ const profile = process.env.BUDDYMAC_PROFILE
 const commits: { at: number; ms: number }[] = []
 if (profile) setInterval(() => void Bun.write(profile, JSON.stringify(commits)), 1000)
 const Root = () => profile ? <Profiler id="app" onRender={(_id, _phase, actual) => { commits.push({ at: Date.now(), ms: actual }) }}><App /></Profiler> : <App />
-render(<Root />, { title: 'BuddyMac', appName: 'BuddyMac', width: 1080, height: 760, minWidth: 900, minHeight: 640, focus: false, onKeyDown: onWindowKey })
+render(<Root />, { title: 'BuddyMac', appName: 'BuddyMac', width: 1080, height: 760, minWidth: 900, minHeight: 640, focus: false, show: process.env.GPUIX_BACKGROUND === '1', onKeyDown: onWindowKey })

@@ -86,10 +86,11 @@ await writeFile(join(stage, "Contents/Info.plist"), `<?xml version="1.0" encodin
 <key>CFBundleExecutable</key><string>BuddyMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-<key>CFBundleShortVersionString</key><string>0.1.6</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>0.1.7</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>LSUIElement</key><true/>
 <key>NSMicrophoneUsageDescription</key><string>BuddyMac records your voice when you start dictation.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>BuddyMac transcribes speech when you start dictation.</string>
 <key>NSAppleEventsUsageDescription</key><string>BuddyMac controls applications when you request a desktop action.</string>

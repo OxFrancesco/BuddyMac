@@ -18,6 +18,7 @@ const library=dlopen(resolve(root,'libbuddymac.dylib'),{
  buddymac_status_title:{args:[FFIType.ptr],returns:FFIType.void},
  buddymac_pointer_state:{args:[],returns:FFIType.cstring},
  buddymac_hide_window:{args:[],returns:FFIType.void},
+ buddymac_show_window:{args:[],returns:FFIType.void},
  buddymac_window_visible:{args:[],returns:FFIType.bool},
  buddymac_window_key:{args:[],returns:FFIType.bool},
 })
@@ -30,6 +31,7 @@ export function copyText(text:string){const data=cString(text);library.symbols.b
 
 export function promptSecret(){return String(library.symbols.buddymac_prompt_secret())}
 export function keepRunning(){library.symbols.buddymac_keep_running()}
+export function showWindow(){library.symbols.buddymac_show_window()}
 
 export const loginEnabled=()=>packaged&&library.symbols.buddymac_login_enabled()
 export function setLogin(enabled:boolean){if(!packaged)throw new Error("Open the installed BuddyMac app to change login settings.");const error=String(library.symbols.buddymac_set_login(enabled));if(error)throw new Error(error);return loginEnabled()}
