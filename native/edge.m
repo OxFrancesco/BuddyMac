@@ -47,7 +47,14 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
 }
 - (void)revealOn:(NSScreen *)screen {
     if (!screen || !self.active) return;
-    self.displayID = screen.deviceDescription[@"NSScreenNumber"];
+    NSNumber *display = screen.deviceDescription[@"NSScreenNumber"];
+    // Already on screen there: a drag held over the open shelf must not ask React to present it again. That request
+    // was never answered, and while it stood the shelf skipped its hide check for good.
+    if (self.revealed && self.window.visible && [display isEqual:self.displayID]) {
+        self.lastInside = NSDate.timeIntervalSinceReferenceDate;
+        return;
+    }
+    self.displayID = display;
     // React prepares the shelf before the panel controller presents the window.
     self.requested = YES;
     self.dismissed = NO;
@@ -64,11 +71,11 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
     }
     if (!self.window) return;
     BOOL next = self.side != 0 && self.filesActive;
+    // Pinning only stops the shelf hiding on its own. Reopening it here would pull the window back to the
+    // shelf every time BuddyMac changed surface, and `dismissed` must survive that so Escape sticks.
     if (next && !self.active) {
         self.active = YES;
         self.revealed = NO;
-        self.dismissed = NO;
-        if (self.pinned) [self revealOn:[self screenAt:NSEvent.mouseLocation]];
     } else if (!next && self.active) {
         self.active = NO;
         self.revealed = NO;
@@ -84,23 +91,26 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
     if (!screen) return;
     NSTimeInterval now = NSDate.timeIntervalSinceReferenceDate;
     BOOL down = (NSEvent.pressedMouseButtons & 1) != 0;
-    NSPasteboard *board = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag];
+    // The drag pasteboard lives in another process. Only ask it about a press that is already a held drag.
     if (down && self.downSince == 0) {
         self.downSince = now;
         self.downPoint = point;
         self.suppressDrag = self.window.visible && NSPointInRect(point, self.window.frame);
         self.notifiedDrag = NO;
+        self.pasteboardSeed = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag].changeCount;
     }
     if (!down) {
         self.downSince = 0;
         self.notifiedDrag = NO;
-        self.pasteboardSeed = board.changeCount;
     }
     BOOL movingDrag = down && hypot(point.x - self.downPoint.x, point.y - self.downPoint.y) > 12;
-    BOOL fileDrag = board.changeCount != self.pasteboardSeed && [board.types containsObject:NSPasteboardTypeFileURL];
-    if (movingDrag && (fileDrag || !self.onlyFiles) && self.autoShow && !self.suppressDrag && !self.notifiedDrag && now - self.downSince >= self.holdDelay) {
-        self.notifiedDrag = YES;
-        [self revealOn:screen];
+    if (movingDrag && self.autoShow && !self.suppressDrag && !self.notifiedDrag && now - self.downSince >= self.holdDelay) {
+        NSPasteboard *board = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag];
+        BOOL fileDrag = board.changeCount != self.pasteboardSeed && [board.types containsObject:NSPasteboardTypeFileURL];
+        if (fileDrag || !self.onlyFiles) {
+            self.notifiedDrag = YES;
+            [self revealOn:screen];
+        }
     }
     if (!self.window.visible) self.revealed = NO;
     if (!self.revealed) {
@@ -127,7 +137,6 @@ static NSRect edgeBand(NSRect visible, NSInteger side) {
 @end
 
 static BuddyMacEdge *edge;
-static NSString *stateJSON;
 
 static void installEdge(void) {
     if (edge) return;
@@ -136,7 +145,6 @@ static void installEdge(void) {
     edge.autoShow = YES;
     edge.onlyFiles = YES;
     [NSNotificationCenter.defaultCenter addObserver:edge selector:@selector(didDismiss:) name:@"BuddyMacWindowDismissed" object:nil];
-    edge.pasteboardSeed = [NSPasteboard pasteboardWithName:NSPasteboardNameDrag].changeCount;
     edge.timer = [NSTimer timerWithTimeInterval:0.05 target:edge selector:@selector(tick) userInfo:nil repeats:YES];
     [NSRunLoop.mainRunLoop addTimer:edge.timer forMode:NSRunLoopCommonModes];
 }
@@ -150,7 +158,10 @@ void buddymac_edge_configure(int side, bool pinned, bool autoShow, double delay,
     edge.onlyFiles = onlyFiles;
     edge.holdDelay = MIN(3, MAX(0.2, delay));
     [edge reconcile];
-    if (edge.active && (oldSide != edge.side || pinned)) [edge revealOn:[edge attachedScreen]];
+    if (edge.active && oldSide != edge.side) {
+        edge.revealed = NO;
+        [edge revealOn:[edge attachedScreen]];
+    }
 }
 
 void buddymac_edge_files_active(bool active) {
@@ -170,14 +181,19 @@ void buddymac_edge_presented(void) {
     edge.lastInside = NSDate.timeIntervalSinceReferenceDate;
 }
 
+// Hides the shelf until the pointer leaves the edge and comes back, pinned or not.
+void buddymac_edge_dismiss(void) {
+    installEdge();
+    if (edge.window && edge.revealed) [edge.window orderOut:nil];
+    edge.dismissed = YES;
+    edge.revealed = NO;
+    edge.requested = NO;
+}
+
 int buddymac_edge_side(void) { return (int)edge.side; }
 
-const char *buddymac_edge_state(void) {
-    NSDictionary *state = @{@"active": @(edge.active), @"revealed": @(edge.revealed), @"requested": @(edge.requested), @"side": @(edge.side)};
-    NSData *data = [NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
-    stateJSON = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    return stateJSON.UTF8String;
-}
+// BuddyMac polls this every 100 ms, so it is a bit set rather than JSON: 1 active, 2 revealed, 4 requested.
+int buddymac_edge_state(void) { return (edge.active ? 1 : 0) | (edge.revealed ? 2 : 0) | (edge.requested ? 4 : 0); }
 
 #ifdef BUDDYMAC_EDGE_TEST_MAIN
 int main(void) {

@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 
 export interface ShelfFile {
@@ -45,5 +47,20 @@ export const importLegacyFiles = () => runFiles("import");
 export const copyFiles = (paths: readonly string[]) => runFiles("copy", paths);
 export const pasteFiles = () => runFiles("paste");
 export const revealFiles = (paths: readonly string[]) => runFiles("reveal", paths);
-export const openFile = (path: string) => runFiles("open", [path]);
+export const openFiles = (paths: readonly string[]) => runFiles("open", paths);
 export const chooseFiles = () => runFiles("choose");
+
+const manifestPath = () => resolve(process.env.BUDDYMAC_DATA_DIR ?? resolve(homedir(), "Library/Application Support/BuddyMac"), "Files/manifest.json");
+
+/**
+ * Changes when the shelf manifest changes or a shelved file appears or disappears. Polling this costs one small
+ * read and a stat per file; `listFiles` launches the helper and asks Launch Services for every file's kind.
+ */
+export async function shelfSignature(): Promise<string> {
+  const manifest = await Bun.file(manifestPath()).text().catch(() => "");
+  let paths: unknown = [];
+  try { paths = JSON.parse(manifest); } catch {}
+  const present = Array.isArray(paths) ? await Promise.all(paths.map(path => typeof path === "string"
+    ? stat(path).then(info => info.isFile() ? "1" : "0", () => "0") : "0")) : [];
+  return `${manifest}\n${present.join("")}`;
+}

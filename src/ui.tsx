@@ -19,10 +19,10 @@ export function Panel({children,testId,style={}}:{children:ReactNode;testId?:str
 export function Labeled({label,children}:{label:string;children:ReactNode}){return <Column style={{flexGrow:1,flexBasis:0,gap:8}}><Text muted size={11}>{label}</Text>{children}</Column>}
 /** Label above a control stacked in a column. Labeled's zero flex basis collapses there, because Taffy has no automatic minimum height. */
 export function Stacked({label,children}:{label:string;children:ReactNode}){return <Column style={{gap:8,flexShrink:0}}><Text muted size={11}>{label}</Text>{children}</Column>}
-export function Field({value,onChange,placeholder,id,multiline=false,height=space.control,onSubmit,autoFocus=false}:{value:string;onChange:(value:string)=>void;placeholder?:string;id:string;multiline?:boolean;height?:number;onSubmit?:()=>void;autoFocus?:boolean}){
+export function Field({value,onChange,placeholder,id,multiline=false,height=space.control,onSubmit,onFocus,onBlur,autoFocus=false}:{value:string;onChange:(value:string)=>void;placeholder?:string;id:string;multiline?:boolean;height?:number;onSubmit?:()=>void;onFocus?:()=>void;onBlur?:()=>void;autoFocus?:boolean}){
  const inset=space.inset-1
  const style:StyleDesc={height,minHeight:height,width:'100%',minWidth:0,flexGrow:0,flexShrink:multiline?0:1,paddingLeft:inset,paddingRight:inset,paddingTop:multiline?inset:0,paddingBottom:multiline?inset:0,backgroundColor:C.bg,borderWidth:1,borderColor:C.line,color:C.text,fontSize:13,fontFamily:font}
- const props={value,onChange:(event:{value?:string})=>onChange(event.value??''),placeholder,testId:id,'aria-label':placeholder??id,style,...autoFocus?{autoFocus:true}:{}}
+ const props={value,onChange:(event:{value?:string})=>onChange(event.value??''),placeholder,testId:id,'aria-label':placeholder??id,style,onFocus,onBlur,...autoFocus?{autoFocus:true}:{}}
  return multiline?<textarea {...props} onSubmit={onSubmit}/>:<input {...props} onSubmit={onSubmit}/>
 }
 export function ErrorText({message}:{message:string}){return message?<Text style={{color:C.accent}}>{message}</Text>:null}

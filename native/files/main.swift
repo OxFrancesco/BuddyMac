@@ -19,13 +19,15 @@ func failure(_ message: String) -> NSError {
     NSError(domain: "BuddyMac.Files", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
 }
 
+let timestamps = ISO8601DateFormatter()
+
 func describe(_ path: String) -> ShelfFile {
     let url = URL(fileURLWithPath: path)
     let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey])
     let kind = try? url.resourceValues(forKeys: [.localizedTypeDescriptionKey]).localizedTypeDescription
     return ShelfFile(path: path, name: url.lastPathComponent, exists: values?.isRegularFile == true,
         size: values?.fileSize, kind: kind,
-        modifiedAt: values?.contentModificationDate.map { ISO8601DateFormatter().string(from: $0) })
+        modifiedAt: values?.contentModificationDate.map { timestamps.string(from: $0) })
 }
 
 do {
@@ -58,8 +60,9 @@ do {
         let urls = try inputs.map { URL(fileURLWithPath: try store.canonical($0)) }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     case "open":
-        guard inputs.count == 1, let path = inputs.first else { throw failure("Select one file to open") }
-        guard NSWorkspace.shared.open(URL(fileURLWithPath: try store.canonical(path))) else { throw failure("macOS could not open the file") }
+        guard !inputs.isEmpty else { throw failure("Select a file to open") }
+        let urls = try inputs.map { URL(fileURLWithPath: try store.canonical($0)) }
+        for url in urls where !NSWorkspace.shared.open(url) { throw failure("macOS could not open \(url.lastPathComponent)") }
     case "choose":
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
