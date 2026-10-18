@@ -3,7 +3,7 @@ import { useGpuix } from '@gpuix/react'
 import { requestCompact } from './panel'
 import { setSpeechShortcuts } from './speech-shortcuts'
 import { speechHistoryDate, type DictationStyle, type SpeechHistoryEntry, type SpeechNeed, type SpeechPreferences, type SpeechShortcut, type VocabularyEntry } from './speech'
-import { speech, useSpeech } from './speech-state'
+import { speech, useSpeech, useSpeechLevel } from './speech-state'
 import { talkPrefs, useTalkPrefs } from './talk-prefs'
 import { useSticky } from './sticky'
 import { appBundleInfo, chooseSaveLocation, copyText, openSettingsPane, promptSecret } from './platform'
@@ -78,6 +78,7 @@ export function TalkView() {
 
 function RecordTab({ s, recording, busy, history, importAudio }: { s: ReturnType<typeof useSpeech>; recording: boolean; busy: boolean; history: SpeechHistoryEntry[]; importAudio: () => void }) {
   const [scratch, setScratch] = useSticky('talk-scratch', '')
+  const level = useSpeechLevel()
   const status = recording ? 'Listening' : busy ? s.phase === 'transcribing' ? 'Transcribing audio' : s.phase === 'formatting' ? 'Cleaning up text' : s.phase === 'inserting' ? 'Inserting text' : 'Working' : s.status?.keyConfigured ? 'Ready to dictate' : 'Add your OpenRouter key to start'
   const hold = useTalkPrefs().saved?.shortcuts.hold
   const last = s.text || history[0]?.text || ''
@@ -85,7 +86,7 @@ function RecordTab({ s, recording, busy, history, importAudio }: { s: ReturnType
     <Row style={{ paddingBottom: space.gap, borderBottomWidth: 1, borderColor: C.line, justifyContent: 'space-between', flexShrink: 0 }}>
       <Column style={{ flexGrow: 1, gap: 8 }}>
         <Text size={16}>{status}</Text>
-        {recording ? <div style={{ width: 200, height: 4, backgroundColor: C.line }}><div style={{ height: 4, width: Math.max(4, Math.min(200, s.level * 200)), backgroundColor: C.accent }} /></div>
+        {recording ? <div style={{ width: 200, height: 4, backgroundColor: C.line }}><div style={{ height: 4, width: Math.max(4, Math.min(200, level * 200)), backgroundColor: C.accent }} /></div>
           : <Text muted size={11}>{s.status?.shortcutsEnabled && hold ? `Hold ${label(hold)} in any app to dictate.` : 'Turn on shortcuts in the Shortcuts tab to dictate from any app.'}</Text>}
       </Column>
       <Row>

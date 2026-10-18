@@ -21,6 +21,8 @@ export class DreamScheduler {
 		void this.runIfDue();
 	}
 
+	get isRunning(): boolean { return this.controller !== null; }
+
 	stop(): void {
 		this.stopped = true;
 		if (this.timer) clearInterval(this.timer);

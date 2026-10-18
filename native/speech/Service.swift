@@ -226,8 +226,7 @@ final class SpeechService {
                 operation = Task { [weak self] in
                     guard let self else { return }
                     do {
-                        let normalizer = S1MiniNormalizer(modelURL: modelURL)
-                        let result = try await normalizer.normalize(protected.text, style: preferences.style)
+                        let result = try await normalizer(for: modelURL).normalize(protected.text, style: preferences.style)
                         try Task.checkCancellation()
                         guard generation == id else { throw CancellationError() }
                         reply(command.id, ["text": try protected.restore(result)])
@@ -350,6 +349,7 @@ final class SpeechService {
                 localNormalizer = nil
                 localNormalizerURL = nil
                 if FileManager.default.fileExists(atPath: own.path) { try FileManager.default.removeItem(at: own) }
+                try? FileManager.default.removeItem(at: S1MiniModel.verificationURL(for: own))
                 reply(command.id, ["removed": true])
             case "history":
                 reply(command.id, try json(storage.data.history))
@@ -387,6 +387,15 @@ final class SpeechService {
             default: throw SpeechFailure(message: "Unsupported speech service operation.")
             }
         } catch { reject(command.id, error) }
+    }
+
+    /// One normalizer per model path keeps the loaded model warm across dictations until its idle unload.
+    private func normalizer(for url: URL) -> S1MiniNormalizer {
+        if let localNormalizer, localNormalizerURL == url { return localNormalizer }
+        let normalizer = S1MiniNormalizer(modelURL: url)
+        localNormalizer = normalizer
+        localNormalizerURL = url
+        return normalizer
     }
 
     private func validateCombinedShortcuts() throws {
@@ -566,13 +575,7 @@ final class SpeechService {
                             guard S1MiniPrompt.supports(language: preferences.language, style: style) else {
                                 throw SpeechFailure(message: "Local S1-mini cleanup needs an English language setting. Choose English or select cloud cleanup.")
                             }
-                            let url = storage.modelURL
-                            if localNormalizerURL != url {
-                                localNormalizer = S1MiniNormalizer(modelURL: url)
-                                localNormalizerURL = url
-                            }
-                            guard let localNormalizer else { throw SpeechFailure(message: "The local cleanup engine could not start.") }
-                            cleaned = try await localNormalizer.normalize(protected.text, style: style)
+                            cleaned = try await normalizer(for: storage.modelURL).normalize(protected.text, style: style)
                         } else {
                             cleaned = try await client.cleanUp(protected.text, settings: CleanupSettings(enabled: true, style: style, model: preferences.cleanupModel),
                                                                context: destination?.appName, vocabulary: preferences.vocabulary, memory: memory, screen: screen)

@@ -146,6 +146,39 @@ test('managed artwork survives source deletion, failed selections preserve setti
   expect(await reapplyManaged()).toEqual([]);
 });
 
+test('periodic reapply launches the helper only for apps whose icon files changed', async () => {
+  const { chmod, utimes } = await import('node:fs/promises');
+  process.env.BUDDYMAC_DATA_DIR = join(directory, 'data');
+  const wrapper = join(directory, 'counting-native'), log = join(directory, 'helper.log');
+  await mkdir(wrapper, { recursive: true });
+  await Bun.write(join(wrapper, 'buddymac-dock-applier'), `#!/bin/sh\necho "$1" >> '${log}'\nexec '${join(import.meta.dir, '../../dist/native/buddymac-dock-applier')}' "$@"\n`);
+  await chmod(join(wrapper, 'buddymac-dock-applier'), 0o755);
+  const launches = async () => (await Bun.file(log).exists() ? (await Bun.file(log).text()).trim().split('\n').length : 0);
+  const pack = await fixture('Periodic');
+  const app = pack.icons[0]!.appPath;
+  await setManaged(pack, [app]);
+  process.env.BUDDYMAC_NATIVE_DIR = wrapper;
+  try {
+    expect((await reapplyManaged({ onlyChanged: true }))[0]?.changed).toBe(true);
+    expect(await launches()).toBe(1);
+    const quiet = await reapplyManaged({ onlyChanged: true });
+    expect(quiet[0]?.applied).toBe(true);
+    expect(quiet[0]?.changed).toBe(false);
+    expect(await launches()).toBe(1);
+    await utimes(join(app, 'Icon\r'), new Date(), new Date());
+    expect((await reapplyManaged({ onlyChanged: true }))[0]?.changed).toBe(false);
+    expect(await launches()).toBe(2);
+    expect((await nativeDock('reset', JSON.stringify([{ appPath: app }]))).code).toBe(0);
+    expect((await reapplyManaged({ onlyChanged: true }))[0]?.changed).toBe(true);
+    expect(await launches()).toBe(3);
+    await reapplyManaged({ onlyChanged: true });
+    expect(await launches()).toBe(3);
+    expect((await reapplyManaged())[0]?.applied).toBe(true);
+    expect(await launches()).toBe(4);
+  } finally { delete process.env.BUDDYMAC_NATIVE_DIR; }
+  await setManaged(pack, []);
+});
+
 test('pinned app inspection exports real icons only to the isolated data directory', async () => {
   const { listDockApps } = await import('../../src/dock');
   const apps = await listDockApps();

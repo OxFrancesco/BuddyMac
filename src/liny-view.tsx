@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useGpuix } from '@gpuix/react'
 import { chmod, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -30,10 +30,15 @@ export async function captureScreen(interactive: boolean): Promise<Image | null>
   finally { await rm(path, { force: true }) }
 }
 
-interface LinyUi { state: LinyState | null; snapshot: LinySnapshot | null; sessions: LinySessions | null; error: string; notice: string; busy: boolean; stream: string }
-let ui: LinyUi = { state: null, snapshot: null, sessions: null, error: '', notice: '', busy: false, stream: '' }
+interface LinyUi { state: LinyState | null; snapshot: LinySnapshot | null; sessions: LinySessions | null; error: string; notice: string; busy: boolean }
+let ui: LinyUi = { state: null, snapshot: null, sessions: null, error: '', notice: '', busy: false }
 const uiListeners = new Set<() => void>()
 const setUi = (next: Partial<LinyUi> | ((current: LinyUi) => Partial<LinyUi>)) => { ui = { ...ui, ...(typeof next === 'function' ? next(ui) : next) }; for (const listener of uiListeners) listener() }
+// The streaming reply has its own store: a delta lands every 33 ms, and only the bubble that shows it should re-render.
+let stream = ''
+const streamListeners = new Set<() => void>()
+const setStream = (next: string) => { if (next === stream) return; stream = next; for (const listener of streamListeners) listener() }
+const useStream = () => useSyncExternalStore(listener => { streamListeners.add(listener); return () => { streamListeners.delete(listener) } }, () => stream)
 let listening = false
 async function runLiny(work: () => Promise<unknown>) { setUi({ error: '' }); try { await work() } catch (cause) { setUi({ error: message(cause) }) } }
 async function refreshLiny() { const [state, snapshot, sessions] = await Promise.all([liny.state(), liny.snapshot(), liny.sessions()]); setUi({ state, snapshot, sessions }) }
@@ -44,11 +49,11 @@ function listen() {
   void runLiny(refreshLiny)
   liny.onEvent(event => {
     switch (event.event) {
-      case 'turn.started': setUi({ busy: true, stream: '' }); break
-      case 'delta': setUi(current => ({ stream: current.stream + event.text })); break
-      case 'turn.done': setUi({ busy: false, stream: '', notice: '' }); void runLiny(refreshLiny); break
+      case 'turn.started': setStream(''); setUi({ busy: true }); break
+      case 'delta': setStream(stream + event.text); break
+      case 'turn.done': setStream(''); setUi({ busy: false, notice: '' }); void runLiny(refreshLiny); break
       case 'turn.error': setUi({ busy: false, error: event.message }); void refreshLiny().catch(() => {}); break
-      case 'session.reset': setUi({ snapshot: event.snapshot, stream: '' }); break
+      case 'session.reset': setStream(''); setUi({ snapshot: event.snapshot }); break
       case 'notice': case 'auth.progress': setUi({ notice: event.message }); break
       case 'tool.activity': setUi({ notice: `${event.label} · ${event.phase}` }); break
       case 'auth.url': void Bun.spawn(['open', event.url]).exited; break
@@ -84,11 +89,11 @@ export function LinySidebar({ onExpand, pending, onPendingUsed }: { onExpand: ()
 
 export function LinyView({ pending, onPendingUsed }: { pending: Image | null; onPendingUsed: () => void }) {
   const [tab, setTab] = useTab('Liny')
-  const { state, setState, snapshot, setSnapshot, sessions, setSessions, error, notice, busy, setBusy, stream, run, refresh } = useLinyChat()
+  const { state, setState, snapshot, setSnapshot, sessions, setSessions, error, notice, busy, setBusy, run, refresh } = useLinyChat()
   const actions = <Row><Button id="liny-new-chat" disabled={busy} onClick={() => void run(async () => { setSnapshot(await liny.reset()); setSessions(await liny.sessions()); setTab('Chat') })}>New chat</Button></Row>
   return <TabbedPage id="liny" title="Liny" items={tabs.Liny} tab={tab} onTab={setTab} actions={actions} scroll={tab !== 'Chat'}>
     <ErrorText message={error} />
-    {tab === 'Chat' ? <Chat state={state} snapshot={snapshot} setSnapshot={setSnapshot} setSessions={setSessions} busy={busy} setBusy={setBusy} stream={stream} notice={notice} run={run} pending={pending} onPendingUsed={onPendingUsed} /> : null}
+    {tab === 'Chat' ? <Chat state={state} snapshot={snapshot} setSnapshot={setSnapshot} setSessions={setSessions} busy={busy} setBusy={setBusy} notice={notice} run={run} pending={pending} onPendingUsed={onPendingUsed} /> : null}
     {tab === 'History' ? <Column style={{ gap: 0 }}>
       {sessions?.sessions.map(session => <div key={session.id} role="button" aria-label={session.title || 'Untitled chat'} tabIndex={0} onClick={() => { if (!busy) void run(async () => { setSnapshot(await liny.resume(session.id)); setTab('Chat') }) }} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, minHeight: space.control + 16, paddingLeft: space.inset, paddingRight: space.inset, borderBottomWidth: 1, borderColor: C.line, cursor: 'pointer', hover: { backgroundColor: C.hover } }}>
         <Text style={{ color: session.id === sessions.currentId ? C.accent : C.text }}>{session.title || 'Untitled chat'}</Text>
@@ -101,7 +106,7 @@ export function LinyView({ pending, onPendingUsed }: { pending: Image | null; on
   </TabbedPage>
 }
 
-function Chat({ state, snapshot, setSnapshot, setSessions, busy, setBusy, stream, notice, run, pending, onPendingUsed, autoFocus = false }: { state: LinyState | null; snapshot: LinySnapshot | null; setSnapshot: (update: (previous: LinySnapshot | null) => LinySnapshot | null) => void; setSessions: (sessions: LinySessions) => void; busy: boolean; setBusy: (busy: boolean) => void; stream: string; notice: string; run: (work: () => Promise<unknown>) => Promise<void>; pending: Image | null; onPendingUsed: () => void; autoFocus?: boolean }) {
+function Chat({ state, snapshot, setSnapshot, setSessions, busy, setBusy, notice, run, pending, onPendingUsed, autoFocus = false }: { state: LinyState | null; snapshot: LinySnapshot | null; setSnapshot: (update: (previous: LinySnapshot | null) => LinySnapshot | null) => void; setSessions: (sessions: LinySessions) => void; busy: boolean; setBusy: (busy: boolean) => void; notice: string; run: (work: () => Promise<unknown>) => Promise<void>; pending: Image | null; onPendingUsed: () => void; autoFocus?: boolean }) {
   const { renderer } = useGpuix()
   const [input, setInput] = useSticky('liny-input', ''), [attachments, setAttachments] = useSticky<Image[]>('liny-attachments', []), [screen, setScreen] = useState(false), [capturing, setCapturing] = useState(false)
   useEffect(() => { void Bun.file(screenPreference()).json().then((value: unknown) => setScreen(value === true)).catch(() => {}) }, [])
@@ -128,16 +133,20 @@ function Chat({ state, snapshot, setSnapshot, setSessions, busy, setBusy, stream
     setAttachments(previous => [...previous, ...images].slice(0, 10))
   }
   const hints = input.startsWith('/') && !input.includes(' ') ? commands.filter(([command]) => command.trim().startsWith(input.trim())) : []
+  // Typing and notices re-render Chat; the finished transcript only changes with the snapshot.
+  const rows = useMemo(() => snapshot?.messages.map((entry, index) => <div key={`${snapshot.id}-${index}`} style={{ paddingBottom: 8 }}><div style={{ display: 'flex', flexDirection: 'column', paddingTop: 10, paddingBottom: 10, paddingLeft: entry.role === 'user' ? space.inset - 2 : space.inset, paddingRight: space.inset, borderLeftWidth: entry.role === 'user' ? 2 : 0, borderColor: C.accent, gap: 8 }}>{entry.role === 'assistant' ? <markdown source={entry.text} theme={markdownTheme} style={{ color: C.text, fontFamily: font, fontSize: 13 }} /> : <Text>{entry.text}</Text>}{entry.hasImages ? <Text muted size={11}>Image attached</Text> : null}</div></div>), [snapshot?.id, snapshot?.messages])
   return <>
-    <div testId="liny-messages" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflowY: 'scroll', minHeight: 100, gap: 8 }}>
-      {!snapshot?.messages.length && !stream ? <Empty>Ask Liny anything. Type / for commands.</Empty> : null}
-      {snapshot?.messages.map((entry, index) => <div key={`${snapshot.id}-${index}`} style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, paddingTop: 10, paddingBottom: 10, paddingLeft: entry.role === 'user' ? space.inset - 2 : space.inset, paddingRight: space.inset, borderLeftWidth: entry.role === 'user' ? 2 : 0, borderColor: C.accent, gap: 8 }}>{entry.role === 'assistant' ? <markdown source={entry.text} theme={markdownTheme} style={{ color: C.text, fontFamily: font, fontSize: 13 }} /> : <Text>{entry.text}</Text>}{entry.hasImages ? <Text muted size={11}>Image attached</Text> : null}</div>)}
-      {stream ? <div style={{ flexShrink: 0, paddingTop: 10, paddingBottom: 10, paddingLeft: space.inset, paddingRight: space.inset }}><markdown source={stream} theme={markdownTheme} style={{ color: C.text, fontFamily: font, fontSize: 13 }} /></div> : null}
+    {/* GPUI lays out every mounted element each frame; the list builds only the rows near the viewport and follows the tail while you are at the bottom. */}
+    <div testId="liny-messages" style={{ flexGrow: 1, flexBasis: 0, minHeight: 100, overflow: 'hidden' }}>
+      <virtual-list followTail estimatedItemHeight={120} style={{ height: '100%', width: '100%' }}>
+        {rows}
+        <StreamRow empty={!snapshot?.messages.length} />
+      </virtual-list>
     </div>
     {notice ? <Text muted size={11}>{notice}</Text> : null}
     {hints.length ? <Column style={{ gap: 0, flexShrink: 0, borderWidth: 1, borderColor: C.line }}>{hints.map(([command, detail]) => <div key={command} role="button" aria-label={command} tabIndex={0} onClick={() => setInput(command)} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 16, height: 32, paddingLeft: space.inset - 1, paddingRight: space.inset - 1, cursor: 'pointer', hover: { backgroundColor: C.hover } }}><Text style={{ color: C.accent }}>{command.trim()}</Text><Text muted size={11}>{detail}</Text></div>)}</Column> : null}
     {attachments.length ? <Row style={{ flexShrink: 0, flexWrap: 'wrap' }}>{attachments.map((image, index) => <Button key={index} quiet onClick={() => setAttachments(previous => previous.filter((_, position) => position !== index))}>{`Remove ${image.name}`}</Button>)}</Row> : null}
-    <Field id="liny-input" value={input} onChange={setInput} onSubmit={() => void send()} placeholder="Message Liny. Return sends, Shift Return adds a line." multiline height={82} autoFocus={autoFocus} />
+    <Field id="liny-input" value={input} onChange={value => { setInput(value); liny.warm() }} onSubmit={() => void send()} placeholder="Message Liny. Return sends, Shift Return adds a line." multiline height={82} autoFocus={autoFocus} />
     <Row style={{ flexShrink: 0 }}>
       <Button id="liny-attach" onClick={() => void run(attach)}>Attach images</Button>
       <Button id="liny-capture" disabled={capturing} onClick={() => { setCapturing(true); void run(async () => { try { const shot = await captureScreen(true); if (shot) setAttachments(previous => [...previous, shot].slice(0, 10)) } finally { setCapturing(false) } }) }}>Capture region</Button>
@@ -147,6 +156,11 @@ function Chat({ state, snapshot, setSnapshot, setSessions, busy, setBusy, stream
       {busy ? <Button id="liny-stop" onClick={() => void run(() => liny.abort())}>Stop</Button> : <Button id="liny-send" primary disabled={!input.trim() && !attachments.length} onClick={() => void send()}>Send</Button>}
     </Row>
   </>
+}
+function StreamRow({ empty }: { empty: boolean }) {
+  const text = useStream()
+  if (!text) return empty ? <Empty>Ask Liny anything. Type / for commands.</Empty> : null
+  return <div style={{ paddingTop: 10, paddingBottom: 18, paddingLeft: space.inset, paddingRight: space.inset }}><markdown source={text} theme={markdownTheme} style={{ color: C.text, fontFamily: font, fontSize: 13 }} /></div>
 }
 const screenPreference = () => join(profilePaths().root, 'buddymac-screen-context.json')
 

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { chmod, mkdir, rename } from "node:fs/promises";
+import { chmod, mkdir, rename, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { inference, inferenceEngine } from './inference';
 
@@ -191,13 +191,38 @@ export function setManaged(pack: SavedDockPack, appPaths: readonly string[]): Pr
 
 let reapply: Promise<DockResult[]> | null = null;
 
-export function reapplyManaged(): Promise<DockResult[]> {
+// The applier decides from the bundle's FinderInfo xattr and the Icon\r resource fork. Writing either
+// moves the bundle's or Icon\r's ctime, and an update that swaps the bundle changes its inode, so these
+// stats change whenever the helper's answer could. Kept in memory: the first check after launch is full.
+const verified = new Map<string, { fingerprint: string; result: DockResult }>();
+
+async function fingerprint(icon: SavedDockIcon): Promise<string> {
+  const paths = [icon.appPath, `${icon.appPath}/Icon\r`, `${icon.appPath}/Icon\r/..namedfork/rsrc`, `${icon.appPath}/Contents/Info.plist`];
+  const stats = await Promise.all(paths.map(path => stat(path).then(item => `${item.ino}:${item.size}:${item.mtimeMs}:${item.ctimeMs}:${item.uid}:${item.mode}`, () => "-")));
+  return [icon.styledIconPath, ...stats].join("|");
+}
+
+// App Management denials and failed writes can clear without any file changing, so only these are remembered.
+const settled = (result: DockResult) => result.applied || /App not found|owned by/i.test(result.error ?? "");
+
+/** `onlyChanged` skips the helper for apps whose files are unchanged since they were last confirmed. */
+export function reapplyManaged(options: { onlyChanged?: boolean } = {}): Promise<DockResult[]> {
   if (reapply) return reapply;
   reapply = (async () => {
     await managedWrite;
     const pack = await getManaged();
+    for (const path of verified.keys()) if (!pack?.icons.some(icon => icon.appPath === path)) verified.delete(path);
     if (!pack || !pack.icons.length) return [];
-    return applyDockIcons(pack, pack.icons.map(icon => icon.appPath));
+    const before = await Promise.all(pack.icons.map(fingerprint));
+    const stale = pack.icons.filter((icon, index) => !options.onlyChanged || verified.get(icon.appPath)?.fingerprint !== before[index]);
+    const fresh = stale.length ? await applyDockIcons(pack, stale.map(icon => icon.appPath)) : [];
+    for (const icon of stale) {
+      const result = fresh.find(item => item.appPath === icon.appPath);
+      // Fingerprint after the helper ran: applying an icon rewrites the very files being stat'ed.
+      if (result && settled(result)) verified.set(icon.appPath, { fingerprint: await fingerprint(icon), result: { ...result, changed: false } });
+      else verified.delete(icon.appPath);
+    }
+    return pack.icons.map(icon => fresh.find(item => item.appPath === icon.appPath) ?? verified.get(icon.appPath)?.result).filter(result => result !== undefined);
   })().finally(() => { reapply = null; });
   return reapply;
 }

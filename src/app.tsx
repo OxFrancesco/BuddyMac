@@ -1,6 +1,6 @@
 import { Profiler, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { appendFileSync } from 'node:fs'
-import { render, useGpuix, useWindowSize } from '@gpuix/react'
+import { createRenderer, render, useGpuix, useWindowSize } from '@gpuix/react'
 import type { EventPayload } from '@gpuix/native'
 import { CompactView } from './compact-view'
 import { getPanelMode, hidePanel, presentPanel, requestCompact, restorePanel, setPanelMode, setFilesEdge, setSidebarEdge, subscribeCompact, type PanelMode } from './panel'
@@ -22,8 +22,9 @@ import { hideWindow, showWindow, windowKey, initializePlatform, installMenu, kee
 import { removeFiles } from './files'
 import { dockFailureMessage, reapplyManaged, refreshDock } from './dock'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
-import { configureEdge, edgePresented, getEdgeState, getFilesEdge, loadEdgeSettings, setEdgeFilesActive } from './edge'
+import { configureEdge, dismissEdgeShelf, edgePresented, getEdgeState, getFilesEdge, loadEdgeSettings, setEdgeFilesActive } from './edge'
 import { isSection, nav, sections, useNav, type Section } from './nav'
+import { dispatchWindowKey, onWindowKey } from './keys'
 import { Palette, paletteKey } from './palette'
 import { takeoverFromLaunch } from './takeover'
 import { handleRecorderAction } from './recorder'
@@ -43,9 +44,6 @@ function Panel({ section, pending, onPendingUsed, shown }: { section: Section; p
     case 'Settings': return <SettingsView />
   }
 }
-
-const windowKeys = new Set<(event: EventPayload) => void>()
-function onWindowKey(event: EventPayload) { for (const listener of windowKeys) listener(event) }
 
 function inRect(point: { x: number; y: number }, rect: { x: number; y: number; width: number; height: number }) { return point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height }
 function linyZone(pointer: PointerState, layout: SurfaceSettings['linySidebar']) {
@@ -89,7 +87,8 @@ function App() {
   const surfaceRef = useRef<Surface>(surface), layoutRef = useRef(layout)
   surfaceRef.current = surface; layoutRef.current = layout
   const report = (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause))
-  const size = useWindowSize()
+  // Only the notch panel and the present delay below read the size. Hidden, a slow poll is enough.
+  const size = useWindowSize({ intervalMs: surface === 'hidden' ? 1000 : 100 })
 
 
   function change(next: Surface) {
@@ -168,8 +167,7 @@ function App() {
       if (cmd && event.key && /^[1-7]$/.test(event.key)) { const target = sections[Number(event.key) - 1]; if (target && surfaceRef.current === 'main') nav.go(target); return }
       if (event.key === 'escape' && !event.modifiers?.cmd && (surfaceRef.current === 'liny' || (surfaceRef.current === 'notch' && !notchPin.pinned))) dismissFloating()
     }
-    windowKeys.add(listener)
-    return () => { windowKeys.delete(listener) }
+    return onWindowKey(listener)
   }, [renderer])
 
   useEffect(() => {
@@ -209,10 +207,13 @@ function App() {
       const visible = windowVisible(), edge = getEdgeState()
       if (current === 'main' && !visible) { traceSurface('main -> hidden (window closed)'); surfaceRef.current = 'hidden'; setSurface('hidden'); setEdgeFilesActive(true); return }
       if (current === 'files' && !edge.revealed && !edge.requested) { dismissFloating(); return }
-      if ((current === 'hidden' || current === 'main') && edge.requested) { change('files'); return }
+      // The open shelf moved to another display or edge: lay it out again in place.
+      if (current === 'files' && edge.requested) { try { setFilesEdge(getFilesEdge()); setPanelMode('files'); presentPanel(); edgePresented() } catch (cause) { report(cause); dismissEdgeShelf() } return }
+      if ((current === 'hidden' || current === 'main') && edge.requested) { change('files'); if (surfaceRef.current !== 'files') dismissEdgeShelf(); return }
       if (current === 'hidden' && visible && !edge.active) { traceSurface('hidden -> main (window reappeared)'); surfaceRef.current = 'main'; setSurface('main'); return }
       const watchMain = current === 'main' && (settings.focusNotch || settings.linySidebar.enabled)
-      const pointer = current === 'hidden' || current === 'liny' || current === 'notch' || watchMain ? pointerState() : null
+      const watchHidden = current === 'hidden' && (settings.focusNotch || settings.linySidebar.enabled)
+      const pointer = watchHidden || current === 'liny' || current === 'notch' || watchMain ? pointerState() : null
       // With the window open, the edges still work as long as the pointer is not over BuddyMac itself.
       if (pointer && (current === 'hidden' || current === 'main') && !pointer.down) {
         if (settings.linySidebar.enabled && outsideWindow(pointer, 0) && linyZone(pointer, settings.linySidebar)) { if (!linySince) linySince = now; else if (linyArmed && now - linySince >= 350) { linySince = 0; linyArmed = false; closeSince = 0; change('liny') } }
@@ -230,7 +231,8 @@ function App() {
       }
     }, 100)
     // Apps owned by root (for example Tailscale) can't take a custom icon without sudo; that is shown in Dock, not every minute here.
-    const maintain = () => void reapplyManaged().then(results => { const failure = dockFailureMessage(results.filter(result => !/owned by/i.test(result.error ?? ''))); if (failure) report(failure) }).catch(report)
+    const maintain = () => void reapplyManaged({ onlyChanged: true }).then(results => { const failure = dockFailureMessage(results.filter(result => !/owned by/i.test(result.error ?? ''))); if (failure) report(failure) }).catch(report)
+    // Unchanged apps cost a few stat calls, so the minute Dock settings promises stays; updates repaint within it.
     const dockTimer = setInterval(maintain, 60_000)
     return () => { stopFocusService(); clearInterval(timer); clearInterval(dockTimer) }
   }, [renderer])
@@ -238,17 +240,21 @@ function App() {
   // The speech helper draws the dictation pill itself, so it follows the recorder even with the window closed.
   useEffect(() => { if (process.env.GPUIX_BACKGROUND !== '1') void Promise.resolve().then(() => speech().setOverlay(layout.talkPill)).catch(report) }, [layout.talkPill])
 
+  useEffect(() => { setFramePace(surface === 'hidden' ? 'idle' : 'active') }, [surface])
+
   const floating = surface === 'focus' || surface === 'talk' || surface === 'liny' || surface === 'files' || surface === 'notch'
+  // Nothing of the main window stays mounted while it is hidden: Focus, Liny and Talk would keep re-rendering unseen.
+  const main = surface === 'main'
   return <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', backgroundColor: C.bg }}>
     <MenuBarTimer />
-    {!floating ? <Sidebar section={section} /> : null}
+    {main ? <Sidebar section={section} /> : null}
     <div style={{ position: 'relative', flexGrow: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
-      {!floating ? <div key={section} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><Panel section={section} shown pending={section === 'Liny' ? pending : null} onPendingUsed={() => setPending(null)} /></div> : null}
+      {main ? <div key={section} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><Panel section={section} shown pending={section === 'Liny' ? pending : null} onPendingUsed={() => setPending(null)} /></div> : null}
       {surface === 'focus' || surface === 'talk' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><CompactView mode={surface} onExpand={() => requestCompact('normal')} /></div> : null}
       {surface === 'liny' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><LinySidebar onExpand={() => { nav.go('Liny'); requestCompact('normal') }} pending={pending} onPendingUsed={() => setPending(null)} /></div> : null}
       {surface === 'notch' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><FocusPanel width={size.width} onExpand={() => openMain('Focus')} onSettings={() => { nav.go('Focus', 'Settings'); change('main') }} /></div> : null}
       {surface === 'files' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><FilesView shelf /></div> : null}
-      {paletteOpen && !floating ? <Palette /> : null}
+      {paletteOpen && main ? <Palette /> : null}
       {error ? <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', paddingTop: 12, paddingBottom: 12, paddingLeft: floating ? 16 : space.page, paddingRight: floating ? 16 : space.page, borderTopWidth: 1, borderColor: C.line, backgroundColor: C.bg }}>
         {needsAppManagement(error) && floating ? <Button id="dock-permission-expand" onClick={() => openMain('Dock')}>Fix Dock icons</Button> : needsAppManagement(error) ? <DockRecovery error={error} onError={setError} dismiss={() => setError('')} retry={async () => {
           const results = await reapplyManaged()
@@ -296,4 +302,25 @@ const profile = process.env.BUDDYMAC_PROFILE
 const commits: { at: number; ms: number }[] = []
 if (profile) setInterval(() => void Bun.write(profile, JSON.stringify(commits)), 1000)
 const Root = () => profile ? <Profiler id="app" onRender={(_id, _phase, actual) => { commits.push({ at: Date.now(), ms: actual }) }}><App /></Profiler> : <App />
-render(<Root />, { title: 'BuddyMac', appName: 'BuddyMac', width: 1080, height: 760, minWidth: 900, minHeight: 640, focus: false, show: process.env.GPUIX_BACKGROUND === '1', onKeyDown: onWindowKey })
+// GPUix's own loop pumps AppKit every 8 ms for the life of the app. BuddyMac mostly sits hidden in the menu bar,
+// so it drives the loop itself and slows to 20 Hz while nothing is on screen. The edge shelf polls at that rate anyway.
+const renderer = createRenderer()
+renderer.init({ title: 'BuddyMac', appName: 'BuddyMac', width: 1080, height: 760, minWidth: 900, minHeight: 640, focus: false, show: process.env.GPUIX_BACKGROUND === '1' })
+const framePace = { active: 8, idle: Number(process.env.BUDDYMAC_IDLE_FRAME_MS ?? 50) }
+let frameMs = framePace.active, frameTimer: ReturnType<typeof setTimeout> | undefined
+function frame() {
+  const started = performance.now()
+  let running = true
+  try { running = renderer.tick() } catch (cause) { console.error(cause) }
+  if (!running) process.exit(0)
+  frameTimer = setTimeout(frame, Math.max(0, frameMs - (performance.now() - started)))
+}
+function setFramePace(pace: 'active' | 'idle') {
+  const next = framePace[pace]
+  if (next === frameMs) return
+  frameMs = next
+  // Waking up should not wait out the rest of a slow frame.
+  if (pace === 'active') { clearTimeout(frameTimer); frame() }
+}
+if (renderer.requiresTick()) frame()
+render(<Root />, { renderer, onKeyDown: dispatchWindowKey })

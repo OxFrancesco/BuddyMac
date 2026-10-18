@@ -29,18 +29,28 @@ function createGateway() {
 }
 let gateway = createGateway()
 let importing = false
+let inFlight = 0
+let retired = false
 function stop() { gateway.stop(); releaseLock(lock); process.exit(0) }
 process.on('SIGINT', stop); process.on('SIGTERM', stop)
 process.on('exit', () => releaseLock(lock))
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })
 lines.on('close', stop)
-lines.on('line', line => { void handle(line) })
+lines.on('line', line => { if (!retired) void handle(line) })
 async function handle(line: string) {
   let id = -1
+  inFlight++
   try {
     const value: unknown = JSON.parse(line)
     if (typeof value !== 'object' || value === null || !('id' in value) || typeof value.id !== 'number' || !Number.isSafeInteger(value.id)) throw new Error('Invalid Liny request')
     id = value.id
+    // The client asks after its own idle timeout; only the worker sees background work such as a dream run.
+    if ('method' in value && value.method === 'worker.retire') {
+      if (inFlight > 1 || importing || gateway.isWorking) { emit({ type: 'res', id, ok: true, payload: { retired: false } }); return }
+      retired = true
+      process.stdout.write(`${JSON.stringify({ type: 'res', id, ok: true, payload: { retired: true } })}\n`, () => stop())
+      return
+    }
     if (importing) throw new Error('Profile import is in progress')
     let payload: unknown
     if ('method' in value && value.method === 'import.sources') payload = { sources: listImportSources(), activeProfile: activeProfile(), mode: 'personal', managedBilling: false }
@@ -60,4 +70,5 @@ async function handle(line: string) {
     }
     emit({ type: 'res', id, ok: true, payload })
   } catch (error) { emit({ type: 'res', id, ok: false, error: error instanceof Error ? error.message : 'Liny request failed' }) }
+  finally { inFlight-- }
 }

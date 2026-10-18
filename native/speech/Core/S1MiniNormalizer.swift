@@ -4,10 +4,22 @@ import llama
 public actor S1MiniNormalizer {
     private var loaded: NativeModel?
     private let modelURL: URL
+    /// The model holds ~480 MB of GPU memory, so it is released after this long without a cleanup and reloaded on demand.
+    private let idleTimeout: Duration
+    private var unloadTask: Task<Void, Never>?
+    private var uses = 0
 
-    public init(modelURL: URL) { self.modelURL = modelURL }
+    public init(modelURL: URL) {
+        self.modelURL = modelURL
+        let seconds = ProcessInfo.processInfo.environment["BUDDYMAC_SPEECH_MODEL_IDLE_SECONDS"].flatMap(Double.init) ?? 300
+        idleTimeout = .milliseconds(Int(max(1, seconds) * 1_000))
+    }
 
-    public func unload() { loaded = nil }
+    public func unload() {
+        unloadTask?.cancel()
+        unloadTask = nil
+        loaded = nil
+    }
 
     public func prepare() throws {
         _ = try normalize("um", style: .natural)
@@ -19,11 +31,32 @@ public actor S1MiniNormalizer {
         guard transcript.utf8.count <= 32_000 else { throw S1MiniError.tooLong }
         let prompt = try S1MiniPrompt.make(transcript, style: style)
         if loaded == nil {
-            try S1MiniModel.verify(modelURL)
+            try S1MiniModel.verify(modelURL, remember: true)
             loaded = try NativeModel(url: modelURL)
         }
         guard let loaded else { throw S1MiniError.initialization }
+        defer { scheduleUnload() }
         return try loaded.normalize(transcript: transcript, prompt: prompt)
+    }
+
+    /// `normalize` never suspends, so the actor runs it and `unloadIfIdle` one at a time.
+    /// A timer that fires mid-cleanup waits, then sees a newer use and leaves the model loaded.
+    private func scheduleUnload() {
+        unloadTask?.cancel()
+        uses &+= 1
+        let use = uses
+        let timeout = idleTimeout
+        unloadTask = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard !Task.isCancelled else { return }
+            await self?.unloadIfIdle(since: use)
+        }
+    }
+
+    private func unloadIfIdle(since use: Int) {
+        guard uses == use else { return }
+        unloadTask = nil
+        loaded = nil
     }
 }
 

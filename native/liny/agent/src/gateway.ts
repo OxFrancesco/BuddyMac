@@ -34,6 +34,8 @@ export interface Client extends TurnOwner {
 
 export class Gateway {
 	get isBusy(): boolean { return this.turnController !== null || this.switchingSession || this.switchingBackend; }
+	/** Work the worker started on its own or that outlives a request: an idle worker may exit only when this is false. */
+	get isWorking(): boolean { return this.isBusy || this.activeTurnId !== null || this.auth.isRunning || this.dreams.isRunning; }
 	private switchingSession = false;
 	private switchingBackend = false;
 	private entries: SessionEntry[];

@@ -77,3 +77,18 @@ test('an explicit computer tool starts the synthetic backend only on execution',
     expect(existsSync(f.ocuLog)).toBe(true)
   } finally { await rm(f.directory, { recursive: true, force: true }) }
 })
+
+test('an idle worker exits and the next request relaunches it with the same conversation', async () => {
+  const f = await fixture()
+  const client = new LinyClient({ command: [process.execPath, resolve(import.meta.dir, '../native/liny/worker.ts')], env: f.env, idleSeconds: 1 })
+  try {
+    await client.send('Synthetic idle fixture')
+    expect(client.running).toBe(true)
+    for (let i = 0; i < 60 && client.running; i++) await Bun.sleep(50)
+    expect(client.running).toBe(false)
+    expect(existsSync(join(f.home, 'worker.lock'))).toBe(false)
+    const snapshot = await client.snapshot()
+    expect(client.running).toBe(true)
+    expect(snapshot.messages.map(message => message.role)).toEqual(['user', 'assistant'])
+  } finally { client.close(); await waitForExit(f.home); await rm(f.directory, { recursive: true, force: true }) }
+}, 30_000)

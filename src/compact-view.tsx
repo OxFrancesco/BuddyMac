@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { focus } from './focus'
 import { focusService } from './focus-state'
-import { speech, useSpeech } from './speech-state'
+import { speech, useSpeech, useSpeechLevel } from './speech-state'
 import { copyText } from './platform'
 import type { CompactMode } from './panel'
 import { Button, C, display, ErrorText, Row, Text } from './ui'
@@ -41,6 +41,7 @@ function CompactFocus({ onExpand }: { onExpand: () => void }) {
 
 function CompactTalk({ onExpand }: { onExpand: () => void }) {
   const state = useSpeech('talk')
+  const level = useSpeechLevel()
   const [pending, setPending] = useState(false)
   const actionPending = useRef(false)
   const recording = state.phase === 'recording'
@@ -60,7 +61,7 @@ function CompactTalk({ onExpand }: { onExpand: () => void }) {
     : state.status.keyConfigured ? 'Ready to dictate' : 'OpenRouter key required'
   return <div testId="compact-talk" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', padding: 12, gap: 12, backgroundColor: C.bg, overflowY: 'scroll' }}>
     <Row style={{ justifyContent: 'space-between', gap: 8, flexShrink: 0 }}><Text size={14}>{label}</Text><Button id="compact-expand" onClick={onExpand}>Expand</Button></Row>
-    {recording ? <div style={{ width: '100%', height: 4, flexShrink: 0, backgroundColor: C.line }}><div style={{ height: 4, width: `${Math.min(100, Math.max(0, state.level * 100))}%`, backgroundColor: C.accent }} /></div> : null}
+    {recording ? <div style={{ width: '100%', height: 4, flexShrink: 0, backgroundColor: C.line }}><div style={{ height: 4, width: `${Math.min(100, Math.max(0, level * 100))}%`, backgroundColor: C.accent }} /></div> : null}
     <Row style={{ gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
       <Button id="compact-talk-record" primary disabled={pending || busy || !state.status || (!recording && !state.status.keyConfigured)} onClick={() => void act(() => recording ? speech().stop() : speech().start())}>{recording ? 'Stop' : 'Record'}</Button>
       {recording || busy ? <Button id="compact-talk-cancel" disabled={state.phase === 'inserting'} onClick={() => void state.run(() => speech().cancel())}>Cancel</Button> : null}

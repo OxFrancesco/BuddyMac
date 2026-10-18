@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useWindowSize } from '@gpuix/react'
 import { requestCompact } from './panel'
 import { focus, focusClient, type FocusSettings, type FocusSnapshot, type FocusTask } from './focus'
@@ -28,6 +28,7 @@ export function FocusView({ visible = true }: { visible?: boolean }) {
   const contentWidth = Math.max(300, size.width - 182 - space.page * 2)
   const openEditor = useCallback((task: FocusTask) => setEditor(editEditor(task)), [])
   const openNew = useCallback((title: string) => setEditor(newEditor(title)), [])
+  const openCheckIn = useCallback(() => setCheckIn(true), [])
   useEffect(() => { focusService.start() }, [])
   async function run(work: () => Promise<FocusSnapshot>) { try { setLocalError(''); return await focusService.run(work) } catch { return null } }
   const actions = <Row>
@@ -35,7 +36,7 @@ export function FocusView({ visible = true }: { visible?: boolean }) {
     <Button id="focus-compact" onClick={() => requestCompact('focus')}>Compact timer</Button>
   </Row>
   return <div style={{ position: 'relative', display: 'flex', width: '100%', height: '100%' }}>
-    <TabbedPage id="focus" title="Focus" items={tabs.Focus} tab={tab} onTab={setTab} actions={actions} scroll={tab !== 'Tasks'}>
+    <TabbedPage id="focus" title="Focus" items={tabs.Focus} tab={tab} onTab={setTab} actions={actions} scroll={tab === 'Settings'}>
       <ErrorText message={localError || error || alertError} />
       {tab === 'Tasks' && data ? <>
         <Row style={{ alignItems: 'flex-start', gap: space.gap, flexGrow: 1, minHeight: 0 }}>
@@ -46,8 +47,8 @@ export function FocusView({ visible = true }: { visible?: boolean }) {
         <ActivityGraph sessions={data.sessionHistory} width={contentWidth} />
         <Ducks active={visible && tab === 'Tasks' && focused} width={contentWidth} />
       </> : null}
-      {tab === 'History' && data ? <HistoryTab data={data} width={contentWidth} /> : null}
-      {tab === 'Check-ins' && data ? <CheckInsTab data={data} onCheckIn={() => setCheckIn(true)} /> : null}
+      {tab === 'History' && data ? <HistoryTab sessions={data.sessionHistory} width={contentWidth} /> : null}
+      {tab === 'Check-ins' && data ? <CheckInsTab checkIns={data.checkIns} onCheckIn={openCheckIn} /> : null}
       {tab === 'Settings' && data ? <SettingsTab settings={data.settings} run={run} /> : null}
     </TabbedPage>
     {editor && data ? <TaskEditor value={editor} onChange={update => setEditor(current => current && update(current))} onClose={() => setEditor(null)} run={run} data={data} /> : null}
@@ -55,23 +56,29 @@ export function FocusView({ visible = true }: { visible?: boolean }) {
   </div>
 }
 
-function HistoryTab({ data, width }: { data: FocusSnapshot; width: number }) {
-  const sessions = data.sessionHistory.filter(session => session.phase === 'work').sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
+// The countdown republishes the snapshot every second while the timer runs. These tabs take the arrays, whose
+// references only change with the data, so they skip those renders, and only the rows on screen are laid out.
+const HistoryTab = memo(function HistoryTab({ sessions, width }: { sessions: FocusSnapshot['sessionHistory']; width: number }) {
+  const work = sessions.filter(session => session.phase === 'work').sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
   return <>
-    <ActivityGraph sessions={data.sessionHistory} width={width} />
-    <Column style={{ gap: 0 }}>{sessions.length ? sessions.map(session => <Row key={session.id} style={{ flexShrink: 0, paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, paddingRight: space.inset, borderBottomWidth: 1, borderColor: C.line }}><Column style={{ flexGrow: 1, gap: 6 }}><Text>{session.taskTitle || 'Inbox'}</Text><Text muted size={11}>{dateTime(session.finishedAt)}</Text></Column><Text>{`${Math.round(session.durationSeconds / 60)} min`}</Text></Row>) : <Empty>Completed focus sessions appear here.</Empty>}</Column>
+    <ActivityGraph sessions={sessions} width={width} />
+    {work.length ? <List testId="history-list" estimatedItemHeight={62}>{work.map(session => <Row key={session.id} style={{ width: '100%', flexShrink: 0, paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, paddingRight: space.inset, borderBottomWidth: 1, borderColor: C.line }}><Column style={{ flexGrow: 1, gap: 6 }}><Text>{session.taskTitle || 'Inbox'}</Text><Text muted size={11}>{dateTime(session.finishedAt)}</Text></Column><Text>{`${Math.round(session.durationSeconds / 60)} min`}</Text></Row>)}</List> : <Empty>Completed focus sessions appear here.</Empty>}
   </>
-}
+})
 
-function CheckInsTab({ data, onCheckIn }: { data: FocusSnapshot; onCheckIn: () => void }) {
-  const entries = [...data.checkIns].sort((a, b) => Date.parse(b.day) - Date.parse(a.day))
+const CheckInsTab = memo(function CheckInsTab({ checkIns, onCheckIn }: { checkIns: FocusSnapshot['checkIns']; onCheckIn: () => void }) {
+  const entries = [...checkIns].sort((a, b) => Date.parse(b.day) - Date.parse(a.day))
   return <>
     <Intro text="How today went and one thing you're grateful for."><Button id="focus-checkin" primary onClick={onCheckIn}>Check in</Button></Intro>
-    <Column style={{ gap: 0 }}>{entries.length ? entries.map(entry => <Row key={entry.id} style={{ flexShrink: 0, alignItems: 'flex-start', paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, borderBottomWidth: 1, borderColor: C.line }}>
+    {entries.length ? <List testId="checkin-list" estimatedItemHeight={64}>{entries.map(entry => <Row key={entry.id} style={{ width: '100%', flexShrink: 0, alignItems: 'flex-start', paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, borderBottomWidth: 1, borderColor: C.line }}>
       <div style={{ width: 44, flexShrink: 0 }}><Text size={15}>{moods[entry.mood - 1]?.symbol ?? ':|'}</Text></div>
       <Column style={{ flexGrow: 1, gap: 6 }}><Text>{`${dateLabel(entry.day)} · ${moods[entry.mood - 1]?.title ?? ''}`}</Text>{entry.text ? <Text muted>{entry.text}</Text> : null}</Column>
-    </Row>) : <Empty>No check-ins yet.</Empty>}</Column>
+    </Row>)}</List> : <Empty>No check-ins yet.</Empty>}
   </>
+})
+
+function List({ testId, estimatedItemHeight, children }: { testId: string; estimatedItemHeight: number; children: ReactNode }) {
+  return <div testId={testId} style={{ flexGrow: 1, flexBasis: 0, minHeight: 0, overflow: 'hidden' }}><virtual-list estimatedItemHeight={estimatedItemHeight} style={{ height: '100%', width: '100%' }}>{children}</virtual-list></div>
 }
 
 function Stepper({ id, label, value, min, max, unit, onChange }: { id: string; label: string; value: number; min: number; max: number; unit: (value: number) => string; onChange: (value: number) => void }) {

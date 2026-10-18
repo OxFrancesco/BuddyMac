@@ -12,16 +12,24 @@ export class FocusService {
   constructor(private engine: FocusEngine = { ...focus, onChange: listener => focusClient.onChange(listener) }, private interval = 1_000, private now = Date.now) {}
   getSnapshot = () => this.state
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
-  private publish(state: FocusState) { this.state = state; for (const listener of this.listeners) listener() }
+  private publish(state: FocusState) { this.state = state; this.syncTimer(); for (const listener of this.listeners) listener() }
   private unsubscribe: (() => void) | null = null
+  private started = false
+  // Only count down while the timer runs. Paused, the helper's change events still bring in new snapshots.
+  private syncTimer() {
+    const wanted = this.started && !!this.state.data?.isRunning
+    if (wanted && !this.timer) this.timer = setInterval(() => { void this.tick() }, this.interval)
+    else if (!wanted && this.timer) { clearInterval(this.timer); this.timer = null }
+  }
   refresh() { return this.run(() => this.engine.snapshot()).catch(() => this.state.data!) }
   start() {
-    if (this.timer) return
+    if (this.started) return
+    this.started = true
     this.unsubscribe = this.engine.onChange?.(() => { void this.refresh() }) ?? null
-    this.timer = setInterval(() => { void this.tick() }, this.interval)
+    this.syncTimer()
     void this.run(() => this.engine.snapshot()).then(() => this.tick()).catch(() => {})
   }
-  stop() { if (this.timer) clearInterval(this.timer); this.timer = null; this.unsubscribe?.(); this.unsubscribe = null }
+  stop() { this.started = false; this.syncTimer(); this.unsubscribe?.(); this.unsubscribe = null }
   clearAlertError() { this.publish({ ...this.state, alertError: '' }) }
   run(work: () => Promise<FocusSnapshot>): Promise<FocusSnapshot> {
     const result = this.chain.then(async () => {

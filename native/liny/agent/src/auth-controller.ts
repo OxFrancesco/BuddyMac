@@ -57,6 +57,8 @@ export class AuthController {
 		private emit: Emit,
 	) {}
 
+	get isRunning(): boolean { return this.loginController !== null; }
+
 	stop(): void {
 		this.loginController?.abort();
 		this.loginController = null;
