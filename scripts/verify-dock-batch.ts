@@ -25,7 +25,7 @@ await chmod(inspector, 0o700)
 const log = join(root, 'requests.jsonl')
 const env = { ...process.env, GPUIX_BACKGROUND: '1', LINY_MOCK: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_NATIVE_DIR: native, BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
   BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LINY_HOME: join(root, 'liny'), BUDDYMAC_LINY_SOURCE_HOME: join(root, 'original'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json'),
-  BUDDYMAC_INFERENCE_MOCK: '1', BUDDYMAC_INFERENCE_FIXTURE_IMAGE: image, BUDDYMAC_INFERENCE_FIXTURE_DELAY_MS: '1500', BUDDYMAC_INFERENCE_FIXTURE_LOG: log, BUDDYMAC_INFERENCE_FIXTURE_FAIL: '"Broken"' }
+  BUDDYMAC_INFERENCE_MOCK: '1', BUDDYMAC_INFERENCE_FIXTURE_IMAGE: image, BUDDYMAC_INFERENCE_FIXTURE_DELAY_MS: '3000', BUDDYMAC_INFERENCE_FIXTURE_LOG: log, BUDDYMAC_INFERENCE_FIXTURE_FAIL: '"Broken"' }
 const executable = process.env.BUDDYMAC_VERIFY_APP
 const app = await launch({ command: executable ?? process.execPath, args: executable ? [] : ['src/app.tsx'], env })
 const frames = join(out, 'frames')
@@ -42,26 +42,35 @@ try {
   await app.getByTestId('dock-tab-new-pack').click()
   await app.getByTestId('dock-pick-atlas').waitFor({ timeoutMs: 15_000 })
   await app.getByTestId('dock-icon-style').fill('Claymation black and white')
-  await app.getByTestId('dock-select-all').click()
+  // Real pointer clicks on the 16px square, not on the label: automation clicks skip the native hit test.
+  const box = async (id: string) => { const bounds = await app.getByTestId(id).bounds(); await app.mouse.click({ x: bounds.x + 8, y: bounds.y + bounds.height / 2 }); await Bun.sleep(500) }
+  await box('dock-select-all')
   assert((await painted()).includes('Generate 6 icons'))
   await shot('selected')
-  checks.push('Select all picks every Dock app and the button names how many icons it will generate')
+  checks.push('Clicking the Select all square picks every Dock app and the button names how many icons it will generate')
+  await box('dock-pick-ember')
+  assert((await painted()).includes('Generate 5 icons'))
+  await box('dock-pick-ember')
+  assert((await painted()).includes('Generate 6 icons'))
+  checks.push('Clicking a row square removes that app from the selection and adds it back')
 
   await app.getByTestId('dock-generate-selected').click()
-  await Bun.sleep(700)
-  assert.equal((await painted()).filter(text => text === 'Generating').length, 3)
+  let inFlight = 0
+  for (let i = 0; i < 40 && inFlight < 3; i++) { await Bun.sleep(100); inFlight = (await painted()).filter(text => text === 'Generating').length }
+  assert.equal(inFlight, 3)
   await shot('generating')
   checks.push('Three icons show Generating while the other three wait')
 
-  // The fixture appends while this polls; only lines ending in a newline are complete.
+  // The fixture appends while this polls; only lines ending in a newline are complete. A loaded Mac needs the long budget.
   let rows: { prompt: string; started: number; ended: number }[] = []
-  for (let i = 0; i < 80 && rows.length < names.length; i++) { await Bun.sleep(150); rows = (await Bun.file(log).exists()) ? (await Bun.file(log).text()).split('\n').slice(0, -1).map(line => JSON.parse(line)) : [] }
+  for (let i = 0; i < 600 && rows.length < names.length; i++) { await Bun.sleep(150); rows = (await Bun.file(log).exists()) ? (await Bun.file(log).text()).split('\n').slice(0, -1).map(line => JSON.parse(line)) : [] }
   assert.equal(rows.length, names.length)
   const overlap = Math.max(...rows.map(row => rows.filter(other => other.started < row.ended && other.ended > row.started).length))
   assert.equal(overlap, 3)
   checks.push(`All ${names.length} requests ran, never more than ${overlap} at once`)
 
-  await app.getByText('Fixture provider refused this icon.').waitFor({ timeoutMs: 10_000 })
+  // The batch reports its failures only after every request has finished.
+  await app.getByText('Broken could not be generated. Generate again to retry.').waitFor({ timeoutMs: 90_000 })
   const text = await painted()
   assert(text.includes('Generate 1 icon'), 'Only the failed app stays selected.')
   assert(text.some(line => line.includes('Broken could not be generated')))
