@@ -4,7 +4,7 @@ import { applyDockIcons, createDockPack, generateDockIcon, dockFailureMessage, d
 import { openSettingsPane } from './platform'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
 import { tabs, useTab } from './nav'
-import { Button, C, Column, Empty, ErrorText, Field, Group, Intro, Labeled, Row, Setting, TabbedPage, Text, space } from './ui'
+import { Button, C, Check, Column, Empty, ErrorText, Field, Group, Intro, Labeled, Row, Setting, TabbedPage, Text, space } from './ui'
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
 
@@ -99,26 +99,50 @@ export function DockView() {
 type Renderer = ReturnType<typeof useGpuix>['renderer']
 function NewPack({ apps, busy, run, renderer, onCreated }: { apps: DockApp[]; busy: boolean; run: (work: () => Promise<void>) => Promise<void>; renderer: Renderer; onCreated: (pack: SavedDockPack) => void }) {
   const [name, setName] = useState(''), [images, setImages] = useState<Record<string, string>>({})
-  const [style, setStyle] = useState(''), [generating, setGenerating] = useState('')
+  const [style, setStyle] = useState(''), [generating, setGenerating] = useState<string[]>([])
+  const [picked, setPicked] = useState<string[]>([]), [failed, setFailed] = useState<Record<string, string>>({})
   const [creating, setCreating] = useState(false)
   const generation = useRef<AbortController | null>(null)
   useEffect(() => () => generation.current?.abort(), [])
   const chosen = apps.filter(app => images[app.appPath])
+  const targets = apps.filter(app => picked.includes(app.appPath))
+  // Three requests at a time. Finished apps leave the selection, so generating again retries only the failures.
+  async function generate(queue: DockApp[]) {
+    const controller = new AbortController(); generation.current = controller
+    const pending = [...queue], failures: string[] = []
+    setFailed(previous => Object.fromEntries(Object.entries(previous).filter(([path]) => !queue.some(app => app.appPath === path))))
+    const worker = async () => {
+      for (let app = pending.shift(); app && !controller.signal.aborted; app = pending.shift()) {
+        const path = app.appPath
+        setGenerating(previous => [...previous, path])
+        try {
+          const image = await generateDockIcon(app, style, controller.signal)
+          if (controller.signal.aborted) return
+          setImages(previous => ({ ...previous, [path]: image })); setPicked(previous => previous.filter(item => item !== path))
+        } catch (cause) { if (!controller.signal.aborted) { failures.push(app.name); setFailed(previous => ({ ...previous, [path]: message(cause) })) } }
+        finally { setGenerating(previous => previous.filter(item => item !== path)) }
+      }
+    }
+    try { await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker)) }
+    finally { generation.current = null }
+    if (failures.length) throw new Error(`${failures.length === 1 ? failures[0] : `${failures.length} icons`} could not be generated. Generate again to retry.`)
+  }
   return <>
     <Intro text="Choose artwork or generate it for each app, then create the icon pack." />
-    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Icon style"><Field id="dock-icon-style" value={style} onChange={setStyle} placeholder="Monochrome clay, soft lighting" /></Labeled>{generating ? <Button id="dock-cancel-generation" onClick={() => generation.current?.abort()}>Cancel generation</Button> : null}</Row>
+    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Icon style"><Field id="dock-icon-style" value={style} onChange={setStyle} placeholder="Monochrome clay, soft lighting" /></Labeled>{generating.length ? <Button id="dock-cancel-generation" onClick={() => generation.current?.abort()}>Cancel generation</Button> : null}</Row>
     <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Pack name"><Field id="dock-pack-name" value={name} onChange={setName} placeholder="Claymation" /></Labeled><Button id="dock-create-pack" primary disabled={busy || !name.trim() || !chosen.length} onClick={() => void run(async () => { setCreating(true); try { onCreated(await createDockPack(name, chosen.map(app => ({ app, imagePath: images[app.appPath]! })))) } finally { setCreating(false) } })}>{creating ? 'Creating' : 'Create pack'}</Button></Row>
+    {apps.length ? <Row style={{ flexShrink: 0, alignItems: 'center', justifyContent: 'space-between', paddingLeft: space.inset }}>
+      <Check id="dock-select-all" label="Select all" checked={picked.length === apps.length} onChange={all => setPicked(all ? apps.map(app => app.appPath) : [])} />
+      <Button id="dock-generate-selected" disabled={busy || !style.trim() || !targets.length} onClick={() => void run(() => generate(targets))}>{targets.length ? `Generate ${targets.length} ${targets.length === 1 ? 'icon' : 'icons'}` : 'Generate selected'}</Button>
+    </Row> : null}
     <Column style={{ gap: 0 }}>
       {apps.map(app => <Row key={app.appPath} style={{ flexShrink: 0, paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, borderBottomWidth: 1, borderColor: C.line }}>
+        <Check id={`dock-pick-${app.id}`} label={`Select ${app.name}`} hideLabel checked={picked.includes(app.appPath)} onChange={on => setPicked(previous => on ? [...previous, app.appPath] : previous.filter(path => path !== app.appPath))} />
         <img src={app.iconPath} objectFit="contain" style={{ width: 36, height: 36, flexShrink: 0 }} />
         {images[app.appPath] ? <img src={images[app.appPath]} objectFit="contain" style={{ width: 36, height: 36, flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, flexShrink: 0, borderWidth: 1, borderColor: C.line }} />}
-        <Column style={{ flexGrow: 1, gap: 4 }}><Text>{app.name}</Text><Text muted size={11}>{images[app.appPath]?.split('/').at(-1) ?? 'No artwork'}</Text></Column>
+        <Column style={{ flexGrow: 1, gap: 4 }}><Text>{app.name}</Text>{generating.includes(app.appPath) ? <Text muted size={11}>Generating</Text> : failed[app.appPath] ? <Text size={11} style={{ color: C.accent }}>{failed[app.appPath]}</Text> : <Text muted size={11}>{images[app.appPath]?.split('/').at(-1) ?? 'No artwork'}</Text>}</Column>
         <Row style={{ gap: 0 }}>
-          <Button id={`dock-generate-${app.id}`} quiet disabled={busy || !style.trim()} onClick={() => void run(async () => {
-            const controller = new AbortController(); generation.current = controller; setGenerating(app.appPath)
-            try { const path = await generateDockIcon(app, style, controller.signal); if (!controller.signal.aborted) setImages(previous => ({ ...previous, [app.appPath]: path })) }
-            finally { generation.current = null; setGenerating('') }
-          })}>{generating === app.appPath ? 'Generating' : 'Generate'}</Button>
+          <Button id={`dock-generate-${app.id}`} quiet disabled={busy || !style.trim()} onClick={() => void run(() => generate([app]))}>Generate</Button>
           {images[app.appPath] ? <Button quiet onClick={() => setImages(({ [app.appPath]: _, ...rest }) => rest)}>Remove</Button> : null}
           <Button quiet onClick={() => void run(async () => { const paths = await renderer?.promptForPaths?.({ files: true, directories: false, multiple: false }); const path = paths?.[0]; if (path) setImages(previous => ({ ...previous, [app.appPath]: path })) })}>Choose image</Button>
         </Row>
