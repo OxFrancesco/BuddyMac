@@ -3,6 +3,9 @@ import { dirname, resolve } from "node:path";
 import { chmod, mkdir, rename, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { inference, inferenceEngine } from './inference';
+import { transparentPng } from './openrouter-images';
+
+const iconModel = 'openai/gpt-image-2.5-flare';
 
 export async function generateDockIcon(app: DockApp, style: string, signal?: AbortSignal): Promise<string> {
   const instruction = style.trim();
@@ -14,16 +17,15 @@ export async function generateDockIcon(app: DockApp, style: string, signal?: Abo
     const mimeType = preview.type;
     if (['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) reference = { type: 'image', mimeType, data: Buffer.from(await preview.arrayBuffer()).toString('base64') };
   }
-  const output = await inferenceEngine().run({ kind: 'image', provider: 'openrouter', model: inference.get().settings.imageModel,
-    ...(reference ? { reference } : {}), prompt: `Create one square macOS Dock icon for ${JSON.stringify(app.name)}. Style: ${JSON.stringify(instruction)}. Keep the app recognizable${reference ? ' using its supplied original icon' : ''}. Use a centered composition with room around the edges. No text, labels, captions or icon grid. Return one image.` }, { signal });
+  const output = await inferenceEngine().run({ kind: 'image', provider: 'openrouter', model: iconModel,
+    ...(reference ? { reference } : {}), prompt: `Create one square macOS Dock icon for ${JSON.stringify(app.name)}. Style: ${JSON.stringify(instruction)}. Keep the app recognizable${reference ? ' using its supplied original icon' : ''}. Use a centered composition with room around the edges. Leave everything outside the icon shape fully transparent, with no backdrop. No text, labels, captions or icon grid. Return one image.` }, { signal });
   if (output.kind !== 'image') throw new Error('The provider did not return an icon.');
-  const extensions: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
-  const extension = extensions[output.image.mimeType];
-  if (!extension) throw new Error('The provider returned an unsupported image format.');
+  const data = Buffer.from(output.image.data, 'base64');
+  if (!transparentPng(data)) throw new Error('The icon came back without a transparent background. Generate it again.');
   const directory = resolve(managedDirectory(), 'generated');
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const path = resolve(directory, `${crypto.randomUUID()}.${extension}`);
-  await Bun.write(path, Buffer.from(output.image.data, 'base64'));
+  const path = resolve(directory, `${crypto.randomUUID()}.png`);
+  await Bun.write(path, data);
   await chmod(path, 0o600);
   return path;
 }

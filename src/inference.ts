@@ -8,17 +8,18 @@ import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-code
 import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter'
 import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth'
 import { DurableInference } from './durable-inference'
+import { generateTransparentIcon } from './openrouter-images'
 
 registerBunOAuthFlows()
 export type TextProvider = 'openai' | 'openai-codex' | 'openrouter'
-export interface InferenceSettings { provider: TextProvider; model: string; imageModel: string; deviceId: string }
+export interface InferenceSettings { provider: TextProvider; model: string; deviceId: string }
 interface InferenceState {
   settings: InferenceSettings; connected: boolean; loading: boolean; login: boolean; loginUrl: string; code: string; prompt: string; error: string
-  models: { id: string; name: string }[]; imageModels: { id: string; name: string }[]
+  models: { id: string; name: string }[]
 }
 const root = () => join(process.env.BUDDYMAC_DATA_DIR ?? join(homedir(), 'Library/Application Support/BuddyMac'), 'Inference')
-const defaults: InferenceSettings = { provider: 'openrouter', model: 'gpt-6.1-sol', imageModel: 'google/gemini-3.1-flash-image', deviceId: '' }
-let state: InferenceState = { settings: defaults, connected: false, loading: true, login: false, loginUrl: '', code: '', prompt: '', error: '', models: [], imageModels: [] }
+const defaults: InferenceSettings = { provider: 'openrouter', model: 'gpt-6.1-sol', deviceId: '' }
+let state: InferenceState = { settings: defaults, connected: false, loading: true, login: false, loginUrl: '', code: '', prompt: '', error: '', models: [] }
 const listeners = new Set<() => void>()
 function update(change: Partial<InferenceState>) { state = { ...state, ...change }; for (const listener of listeners) listener() }
 export function useInference() { return useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener) } }, () => state) }
@@ -62,7 +63,7 @@ class Credentials implements CredentialStore {
 export const inferenceModels = createModels({ credentials: new Credentials(), authContext: { env: async name => name === 'OPENROUTER_API_KEY' ? openRouterKey() : undefined, fileExists: async () => false } })
 inferenceModels.setProvider(openaiProvider())
 inferenceModels.setProvider(openaiCodexProvider())
-inferenceModels.setProvider(openrouterProvider())
+inferenceModels.setProvider({ ...openrouterProvider(), generateImages: generateTransparentIcon })
 if (process.env.BUDDYMAC_INFERENCE_MOCK === '1') {
   const { installInferenceFixture } = await import('./inference-fixture')
   installInferenceFixture(inferenceModels)
@@ -80,21 +81,21 @@ export const inference = {
       const file = Bun.file(join(root(), 'settings.json'))
       if (await file.exists()) {
         const value = await file.json()
-        if (!['openai', 'openai-codex', 'openrouter'].includes(value.provider) || typeof value.model !== 'string' || typeof value.imageModel !== 'string') throw new Error('Invalid inference settings.')
-        update({ settings: { ...defaults, ...value } })
+        if (!['openai', 'openai-codex', 'openrouter'].includes(value.provider) || typeof value.model !== 'string') throw new Error('Invalid inference settings.')
+        const { imageModel: _, ...saved } = value
+        update({ settings: { ...defaults, ...saved } })
       }
       await this.refresh()
     })().catch(cause => { loaded = undefined; update({ loading: false, error: cause instanceof Error ? cause.message : 'Inference settings failed.' }); throw cause })
   },
   async refresh() {
-    update({ connected: !!await inferenceModels.checkAuth(state.settings.provider), loading: false, models: inferenceModels.getModels(state.settings.provider).map(({ id, name }) => ({ id, name })), imageModels: inferenceModels.getModelsOfType('image', 'openrouter').map(({ id, name }) => ({ id, name })) })
+    update({ connected: !!await inferenceModels.checkAuth(state.settings.provider), loading: false, models: inferenceModels.getModels(state.settings.provider).map(({ id, name }) => ({ id, name })) })
   },
   async configure(change: Partial<InferenceSettings>) {
     await this.load()
     if (state.login) throw new Error('Finish or cancel sign-in before changing providers.')
     const settings = { ...state.settings, ...change }
     if (settings.provider !== 'openrouter' && !inferenceModels.getModel(settings.provider, settings.model)) throw new Error('Choose an available subscription model.')
-    if (!inferenceModels.getModelOfType('image', 'openrouter', settings.imageModel)) throw new Error('Choose an available image model.')
     await privateWrite(join(root(), 'settings.json'), settings)
     update({ settings }); await this.refresh()
   },

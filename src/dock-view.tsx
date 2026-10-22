@@ -4,7 +4,6 @@ import { applyDockIcons, createDockPack, generateDockIcon, dockFailureMessage, d
 import { openSettingsPane } from './platform'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
 import { tabs, useTab } from './nav'
-import { nav } from './nav'
 import { Button, C, Column, Empty, ErrorText, Field, Group, Intro, Labeled, Row, Setting, TabbedPage, Text, space } from './ui'
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
@@ -107,8 +106,7 @@ function NewPack({ apps, busy, run, renderer, onCreated }: { apps: DockApp[]; bu
   const chosen = apps.filter(app => images[app.appPath])
   return <>
     <Intro text="Choose artwork or generate it for each app, then create the icon pack." />
-    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Icon style"><Field id="dock-icon-style" value={style} onChange={setStyle} placeholder="Monochrome clay, soft lighting" /></Labeled>{generating ? <Button id="dock-cancel-generation" onClick={() => generation.current?.abort()}>Cancel generation</Button> : <Button id="dock-image-settings" onClick={() => nav.go('Settings', 'AI')}>Image model</Button>}</Row>
-    <Text muted size={11}>Generation uses OpenRouter credits. Pi cannot use ChatGPT's image quota.</Text>
+    <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Icon style"><Field id="dock-icon-style" value={style} onChange={setStyle} placeholder="Monochrome clay, soft lighting" /></Labeled>{generating ? <Button id="dock-cancel-generation" onClick={() => generation.current?.abort()}>Cancel generation</Button> : null}</Row>
     <Row style={{ flexShrink: 0, alignItems: 'flex-end' }}><Labeled label="Pack name"><Field id="dock-pack-name" value={name} onChange={setName} placeholder="Claymation" /></Labeled><Button id="dock-create-pack" primary disabled={busy || !name.trim() || !chosen.length} onClick={() => void run(async () => { setCreating(true); try { onCreated(await createDockPack(name, chosen.map(app => ({ app, imagePath: images[app.appPath]! })))) } finally { setCreating(false) } })}>{creating ? 'Creating' : 'Create pack'}</Button></Row>
     <Column style={{ gap: 0 }}>
       {apps.map(app => <Row key={app.appPath} style={{ flexShrink: 0, paddingTop: 12, paddingBottom: 12, paddingLeft: space.inset, borderBottomWidth: 1, borderColor: C.line }}>
