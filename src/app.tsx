@@ -164,6 +164,7 @@ function App() {
       const cmd = !!event.modifiers?.cmd && !event.modifiers.ctrl && !event.modifiers.alt
       if (nav.get().paletteOpen && event.key && paletteKey(event.key)) return
       if (cmd && event.key === 'k') { nav.palette(!nav.get().paletteOpen); return }
+      if (cmd && event.key === ',' && surfaceRef.current === 'main') { nav.go('Settings'); return }
       if (cmd && event.key && /^[1-7]$/.test(event.key)) { const target = sections[Number(event.key) - 1]; if (target && surfaceRef.current === 'main') nav.go(target); return }
       if (event.key === 'escape' && !event.modifiers?.cmd && (surfaceRef.current === 'liny' || (surfaceRef.current === 'notch' && !notchPin.pinned))) dismissFloating()
     }
@@ -288,13 +289,13 @@ function MenuBarTimer() {
 }
 
 function Sidebar({ section }: { section: Section }) {
-  const item = (target: Section, label: string = target) => <div role="button" aria-label={label} tabIndex={0} key={target} testId={`nav-${target}`} onClick={() => nav.go(target)} onKeyDown={event => { if (event.key === 'enter' || event.key === 'space') nav.go(target) }} style={{ display: 'flex', flexDirection: 'row', height: 40, flexShrink: 0, paddingLeft: 13, alignItems: 'center', justifyContent: 'flex-start', borderLeftWidth: 2, borderColor: section === target ? C.accent : C.bg, backgroundColor: C.bg, hover: { backgroundColor: C.hover }, cursor: 'pointer' }}><Text size={14} style={{ color: section === target ? C.accent : C.text }}>{label}</Text></div>
+  const item = (target: Section, label: string = target, hint?: string) => <div role="button" aria-label={label} tabIndex={0} key={target} testId={`nav-${target}`} onClick={() => nav.go(target)} onKeyDown={event => { if (event.key === 'enter' || event.key === 'space') nav.go(target) }} style={{ display: 'flex', flexDirection: 'row', height: 40, flexShrink: 0, paddingLeft: 13, paddingRight: 12, alignItems: 'center', justifyContent: 'space-between', borderLeftWidth: 2, borderColor: section === target ? C.accent : C.bg, backgroundColor: C.bg, hover: { backgroundColor: C.hover }, cursor: 'pointer' }}><Text size={14} style={{ color: section === target ? C.accent : C.text }}>{label}</Text>{hint ? <Text muted size={11}>{hint}</Text> : null}</div>
   return <div style={{ display: 'flex', flexDirection: 'column', width: 182, flexShrink: 0, height: '100%', paddingTop: space.page, paddingBottom: space.page, paddingLeft: 20, paddingRight: 20, borderRightWidth: 1, borderColor: C.line, gap: 8 }}>
     <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', height: space.header, flexShrink: 0, paddingLeft: 15, marginBottom: space.gap - 8 }}><text style={{ color: C.text, fontFamily: display, fontSize: 23, fontWeight: 700 }}>BuddyMac</text></div>
     {mainSections.map(target => item(target))}
     <div style={{ flexGrow: 1 }} />
     <div role="button" aria-label="Search" tabIndex={0} testId="nav-search" onClick={() => nav.palette(true)} style={{ display: 'flex', flexDirection: 'row', height: 40, flexShrink: 0, paddingLeft: 15, paddingRight: 12, alignItems: 'center', justifyContent: 'space-between', hover: { backgroundColor: C.hover }, cursor: 'pointer' }}><Text size={14}>Search</Text><Text muted size={11}>⌘K</Text></div>
-    {item('Settings')}
+    {item('Settings', 'Settings', '⌘,')}
   </div>
 }
 

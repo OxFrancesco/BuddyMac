@@ -6,7 +6,7 @@ npx buddymac@latest
 
 Downloads BuddyMac to `~/Applications` and opens it. Requires an Apple Silicon Mac running macOS 26 or later and Node.js 20 or later. No Bun installation is needed.
 
-BuddyMac starts in the menu bar without a Dock icon. Choose a tool from its menu to open it; closing the window keeps BuddyMac running.
+BuddyMac starts in the menu bar without a Dock icon. Choose a tool from its menu to open it, or launch BuddyMac again from Spotlight to open Settings when the menu bar icon is hidden. Closing the window keeps BuddyMac running.
 
 Run the same command to update. The installer downloads and verifies the new app first, then waits for you to quit BuddyMac before replacing it. Your settings and app data stay saved. A current or newer installed version is opened without downloading again.
 

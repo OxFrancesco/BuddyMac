@@ -20,6 +20,12 @@ if action == "state" {
 } else if action == "close" {
     guard let window = nodes(app).first(where: { value($0, "AXRole") as? String == "AXWindow" }),
           let button = value(window, "AXCloseButton"), AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success else { exit(2) }
+} else if action == "reopen" {
+    // The reopen event LaunchServices sends when Spotlight, Raycast or Finder launches the app while it runs.
+    // Sent by pid: the verification instance is not started through LaunchServices, so a bundle launch would reach the installed app.
+    let event = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass), eventID: AEEventID(kAEReopenApplication),
+        targetDescriptor: NSAppleEventDescriptor(processIdentifier: pid), returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+    guard (try? event.sendEvent(options: [.noReply], timeout: 5)) != nil else { exit(4) }
 } else {
     guard ["Settings", "Focus"].contains(action), let extras = value(app, "AXExtrasMenuBar"),
           let item = nodes(extras as! AXUIElement).first(where: { value($0, "AXRole") as? String == "AXMenuItem" && value($0, "AXTitle") as? String == action }),

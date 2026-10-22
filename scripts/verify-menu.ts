@@ -63,6 +63,18 @@ try {
   assert.equal((await state()).policy, 1)
   await app.screenshot({ path: join(out, 'menu-focus.png') })
   checks.push('Focus reopens through its native status-menu action with the Dock entry still disabled')
+  await run([helper, String(pid), 'close'])
+  await waitVisible(false)
+  await run([helper, String(pid), 'reopen'])
+  await app.getByTestId('settings-tab-general').waitFor({ timeoutMs: 10000 })
+  await waitVisible(true)
+  assert.equal((await state()).policy, 1)
+  await app.screenshot({ path: join(out, 'reopen-settings.png') })
+  checks.push('Launching the running app again opens Settings without the status menu')
+  await app.getByTestId('nav-Files').click()
+  await app.call('keystrokes', { keys: 'cmd-,' })
+  await app.getByTestId('settings-tab-general').waitFor({ timeoutMs: 5000 })
+  checks.push('Cmd+comma opens Settings from another section')
   await Bun.write(join(out, 'results.json'), JSON.stringify({ verifiedAt: new Date().toISOString(), binary, root, pid, checks,
     kind: 'Native accessibility menu actions, actual window close button and macOS running-app policy',
     limits: ['Isolated fixture data; no microphone recording or live inference request.', 'The status-menu actions were invoked through native accessibility rather than a pointer click on the icon.'] }, null, 2))

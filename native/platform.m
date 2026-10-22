@@ -22,6 +22,8 @@ static BOOL completedExternalDrop(NSDragOperation operation, NSPoint point, NSRe
 @end
 @implementation BuddyMacPlatform
 - (void)choose:(NSMenuItem *)sender { [actions addObject:sender.representedObject]; }
+// Launching BuddyMac again from Spotlight, Raycast or Finder opens Settings: the status item can be hidden behind other menu bar icons.
+- (void)reopen:(NSAppleEventDescriptor *)event withReply:(NSAppleEventDescriptor *)reply { [actions addObject:@"Settings"]; }
 - (void)hideWindow:(id)sender { [self.mainWindow orderOut:nil]; [[NSNotificationCenter defaultCenter] postNotificationName:@"BuddyMacWindowDismissed" object:self.mainWindow]; }
 - (NSDragOperation)draggingSession:(NSDraggingSession *)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context { return NSDragOperationCopy; }
 - (BOOL)ignoreModifierKeysForDraggingSession:(NSDraggingSession *)session { return YES; }
@@ -125,6 +127,7 @@ void buddymac_init(const char *fontDirectory) {
 }
 void buddymac_menu(void) {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+    [[NSAppleEventManager sharedAppleEventManager] setEventHandler:platform andSelector:@selector(reopen:withReply:) forEventClass:kCoreEventClass andEventID:kAEReopenApplication];
     statusItem=[[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
     statusItem.button.image=[NSImage imageWithSystemSymbolName:@"square.grid.2x2" accessibilityDescription:@"BuddyMac"];
     NSMenu *menu=[NSMenu new];
