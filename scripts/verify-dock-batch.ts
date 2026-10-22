@@ -53,8 +53,9 @@ try {
   await shot('generating')
   checks.push('Three icons show Generating while the other three wait')
 
+  // The fixture appends while this polls; only lines ending in a newline are complete.
   let rows: { prompt: string; started: number; ended: number }[] = []
-  for (let i = 0; i < 80 && rows.length < names.length; i++) { await Bun.sleep(150); rows = (await Bun.file(log).exists()) ? (await Bun.file(log).text()).trim().split('\n').map(line => JSON.parse(line)) : [] }
+  for (let i = 0; i < 80 && rows.length < names.length; i++) { await Bun.sleep(150); rows = (await Bun.file(log).exists()) ? (await Bun.file(log).text()).split('\n').slice(0, -1).map(line => JSON.parse(line)) : [] }
   assert.equal(rows.length, names.length)
   const overlap = Math.max(...rows.map(row => rows.filter(other => other.started < row.ended && other.ended > row.started).length))
   assert.equal(overlap, 3)
