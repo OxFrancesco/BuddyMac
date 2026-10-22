@@ -1,6 +1,6 @@
 {
-  "version": "0.1.9",
-  "url": "https://github.com/OxFrancesco/BuddyMac/releases/download/v0.1.9/BuddyMac-darwin-arm64.tar.xz",
-  "sha256": "a25a06e733c60a0b190932f36525c9a87e19a952514c9d48e81c17cdd1ad2195",
-  "bytes": 28047432
+  "version": "0.1.10",
+  "url": "https://github.com/OxFrancesco/BuddyMac/releases/download/v0.1.10/BuddyMac-darwin-arm64.tar.xz",
+  "sha256": "5e6fda5e6bf58a5e68c6b02f517350bc7ec15b9d6825900ac898e18db7f8054a",
+  "bytes": 28042416
 }
