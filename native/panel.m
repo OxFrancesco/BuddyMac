@@ -74,7 +74,7 @@ static NSScreen *pointerScreen(NSWindow *window) {
     return window.screen ?: NSScreen.mainScreen ?: NSScreen.screens.firstObject;
 }
 
-int buddymac_panel_mode(int mode) {
+int buddymac_panel_mode(int mode) { @autoreleasepool {
     if (mode < 0 || mode > 5) return -1;
     NSWindow *window = buddyWindow();
     if (!window) return -2;
@@ -131,20 +131,20 @@ int buddymac_panel_mode(int mode) {
     [NSApp unhideWithoutActivation];
     [window orderFrontRegardless];
     return 1;
-}
+}}
 
 int buddymac_panel_current_mode(void) { return panelMode; }
 
 void buddymac_panel_sidebar_edge(int edge) { sidebarEdge = edge == 1 ? 1 : 2; }
 void buddymac_panel_files_edge(int edge) { filesEdge = edge == 1 ? 1 : 2; }
-void buddymac_panel_present(void) {
+void buddymac_panel_present(void) { @autoreleasepool {
     NSWindow *window = buddyWindow();
     window.alphaValue = 1;
-}
+}}
 
 /// Puts the full window back after the notch panel borrowed it. If you were in another app, BuddyMac returns
 /// behind that app's front window and hands focus back instead of jumping in front of your work.
-int buddymac_panel_restore(bool front) {
+int buddymac_panel_restore(bool front) { @autoreleasepool {
     NSWindow *window = buddyWindow();
     if (!window) return -2;
     window.alphaValue = 0;
@@ -164,9 +164,9 @@ int buddymac_panel_restore(bool front) {
     if (below) [window orderWindow:NSWindowBelow relativeTo:below]; else [window orderFront:nil];
     if (NSApp.active) [NSApp deactivate];
     return 1;
-}
+}}
 
-int buddymac_panel_hide(void) {
+int buddymac_panel_hide(void) { @autoreleasepool {
     NSWindow *window = buddyWindow();
     if (!window) return -2;
     if (panelMode != 0) {
@@ -178,7 +178,7 @@ int buddymac_panel_hide(void) {
     // Deactivate rather than hide: a hidden app cannot show the Files shelf at the screen edge.
     if (NSApp.active) [NSApp deactivate];
     return 1;
-}
+}}
 
 #ifdef BUDDYMAC_PANEL_TEST_MAIN
 int main(void) {

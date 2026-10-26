@@ -6,7 +6,7 @@
 
 static NSMutableArray<NSString *> *actions;
 static NSStatusItem *statusItem;
-static NSString *lastAction;
+static char *nextAction;
 static id eventMonitor;
 
 static BOOL completedExternalDrop(NSDragOperation operation, NSPoint point, NSRect origin, NSRect current) {
@@ -38,6 +38,10 @@ static BOOL completedExternalDrop(NSDragOperation operation, NSPoint point, NSRe
 }
 @end
 static BuddyMacPlatform *platform;
+// Bun calls every buddymac_* function from a thread with no autorelease pool, so anything they autorelease is never
+// freed: polling the pointer state ten times a second grew the heap by about 150 MB an hour. Each entry point drains
+// its own pool. Strings handed back to Bun are copied out first, because UTF8String's buffer can die with the pool.
+static const char *returned(char **slot, NSString *value) { free(*slot); *slot = strdup((value ?: @"").UTF8String); return *slot; }
 static BOOL recordingShortcut;
 static BOOL recordingFn;
 
@@ -73,7 +77,7 @@ static NSString *keyLabel(UInt16 keyCode) {
 static NSMutableDictionary<NSNumber *, NSString *> *hotkeyNames;
 static NSMutableArray<NSValue *> *hotkeyRefs;
 static EventHandlerRef hotkeyHandler;
-static NSString *hotkeyError;
+static char *hotkeyError;
 static OSStatus hotkeyPressed(EventHandlerCallRef next, EventRef event, void *context) {
     EventHotKeyID identifier;
     if (GetEventParameter(event, kEventParamDirectObject, typeEventHotKeyID, NULL, sizeof(identifier), NULL, &identifier) != noErr) return eventNotHandledErr;
@@ -84,7 +88,7 @@ static OSStatus hotkeyPressed(EventHandlerCallRef next, EventRef event, void *co
     return noErr;
 }
 
-void buddymac_init(const char *fontDirectory) {
+void buddymac_init(const char *fontDirectory) { @autoreleasepool {
     actions=[NSMutableArray new]; platform=[BuddyMacPlatform new];
     if (eventMonitor) [NSEvent removeMonitor:eventMonitor];
     eventMonitor=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown | NSEventMaskLeftMouseDragged | NSEventMaskLeftMouseUp | NSEventMaskKeyDown | NSEventMaskFlagsChanged handler:^NSEvent *(NSEvent *event) {
@@ -124,8 +128,8 @@ void buddymac_init(const char *fontDirectory) {
             CTFontManagerRegisterFontsForURL((__bridge CFURLRef)url,kCTFontManagerScopeProcess,NULL);
         }
     }
-}
-void buddymac_menu(void) {
+}}
+void buddymac_menu(void) { @autoreleasepool {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     [[NSAppleEventManager sharedAppleEventManager] setEventHandler:platform andSelector:@selector(reopen:withReply:) forEventClass:kCoreEventClass andEventID:kAEReopenApplication];
     statusItem=[[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
@@ -136,20 +140,22 @@ void buddymac_menu(void) {
         NSMenuItem *item=[[NSMenuItem alloc] initWithTitle:entry[0] action:@selector(choose:) keyEquivalent:@""];
         item.target=platform; item.representedObject=entry[1]; [menu addItem:item];
     }
+    NSMenuItem *camera=[[NSMenuItem alloc] initWithTitle:@"Show or Hide Camera Preview" action:@selector(choose:) keyEquivalent:@""];
+    camera.target=platform; camera.representedObject=@"camera-preview"; [menu addItem:camera];
     [menu addItem:[NSMenuItem separatorItem]];
-    for (NSString *name in @[@"Files",@"Talk",@"Write",@"Focus",@"Dock",@"Liny",@"Settings"]) {
+    for (NSString *name in @[@"Files",@"Talk",@"Write",@"Focus",@"Dock",@"Liny",@"Camera",@"Settings"]) {
         NSMenuItem *item=[[NSMenuItem alloc] initWithTitle:name action:@selector(choose:) keyEquivalent:@""];
         item.target=platform; item.representedObject=name; [menu addItem:item];
     }
     [menu addItem:[NSMenuItem separatorItem]];
     NSMenuItem *quit=[[NSMenuItem alloc] initWithTitle:@"Quit BuddyMac" action:@selector(choose:) keyEquivalent:@"q"];
     quit.target=platform; quit.representedObject=@"quit"; [menu addItem:quit]; statusItem.menu=menu;
-}
-const char *buddymac_next_action(void) {
+}}
+const char *buddymac_next_action(void) { @autoreleasepool {
     if (!actions.count) return "";
-    lastAction=actions.firstObject; [actions removeObjectAtIndex:0]; return lastAction.UTF8String;
-}
-int buddymac_drag(const char *json) {
+    NSString *action=actions.firstObject; [actions removeObjectAtIndex:0]; return returned(&nextAction, action);
+}}
+int buddymac_drag(const char *json) { @autoreleasepool {
     if (platform.dragPaths) return 0;
     NSData *data=[[NSString stringWithUTF8String:json] dataUsingEncoding:NSUTF8StringEncoding];
     id paths=[NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
@@ -172,22 +178,22 @@ int buddymac_drag(const char *json) {
     NSDraggingSession *session=[window.contentView beginDraggingSessionWithItems:items event:event source:platform];
     session.animatesToStartingPositionsOnCancelOrFail=YES;
     return 1;
-}
-void buddymac_copy_text(const char *text) {
+}}
+void buddymac_copy_text(const char *text) { @autoreleasepool {
     [[NSPasteboard generalPasteboard] clearContents];
     [[NSPasteboard generalPasteboard] setString:[NSString stringWithUTF8String:text] forType:NSPasteboardTypeString];
-}
+}}
 
-static NSString *secretResult;
-const char *buddymac_prompt_secret(void) {
+static char *secretResult;
+const char *buddymac_prompt_secret(void) { @autoreleasepool {
     NSAlert *alert=[NSAlert new]; alert.messageText=@"Provider API key";
     alert.informativeText=@"Enter the API key for the selected provider.";
     [alert addButtonWithTitle:@"Save key"]; [alert addButtonWithTitle:@"Cancel"];
     NSSecureTextField *field=[[NSSecureTextField alloc] initWithFrame:NSMakeRect(0,0,360,26)];
     alert.accessoryView=field; [alert.window setInitialFirstResponder:field];
-    secretResult=[alert runModal]==NSAlertFirstButtonReturn ? [field.stringValue copy] : @"";
-    return secretResult.UTF8String;
-}
+    if (secretResult) memset(secretResult, 0, strlen(secretResult));
+    return returned(&secretResult, [alert runModal]==NSAlertFirstButtonReturn ? field.stringValue : @"");
+}}
 @interface BuddyMacWindowDelegate : NSObject <NSWindowDelegate>
 @property(nonatomic,strong) id original;
 @end
@@ -204,7 +210,7 @@ static BOOL isWindowDelegateSelector(SEL selector) {
 - (id)forwardingTargetForSelector:(SEL)selector { return isWindowDelegateSelector(selector) && [self.original respondsToSelector:selector] ? self.original : [super forwardingTargetForSelector:selector]; }
 @end
 static BuddyMacWindowDelegate *windowDelegate;
-void buddymac_keep_running(void) {
+void buddymac_keep_running(void) { @autoreleasepool {
     NSWindow *window=nil;
     for (NSWindow *candidate in NSApp.windows) if ([candidate.title isEqualToString:@"BuddyMac"]) { window=candidate; break; }
     if (!window || windowDelegate) return;
@@ -216,7 +222,7 @@ void buddymac_keep_running(void) {
             item.action=@selector(hideWindow:);
         }
     }
-}
+}}
 void buddymac_notify(const char *text) {
     NSBeep();
 }
@@ -290,16 +296,16 @@ int main(void) {
 }
 #endif
 
-static NSString *loginError;
-bool buddymac_login_enabled(void) { return SMAppService.mainAppService.status == SMAppServiceStatusEnabled; }
-const char *buddymac_set_login(bool enabled) { NSError *error=nil; if(enabled) [SMAppService.mainAppService registerAndReturnError:&error]; else [SMAppService.mainAppService unregisterAndReturnError:&error]; loginError=error.localizedDescription ?: @""; return loginError.UTF8String; }
+static char *loginError;
+bool buddymac_login_enabled(void) { @autoreleasepool { return SMAppService.mainAppService.status == SMAppServiceStatusEnabled; } }
+const char *buddymac_set_login(bool enabled) { @autoreleasepool { NSError *error=nil; if(enabled) [SMAppService.mainAppService registerAndReturnError:&error]; else [SMAppService.mainAppService unregisterAndReturnError:&error]; return returned(&loginError, error.localizedDescription); } }
 
 
 void buddymac_record_shortcut(bool enabled, bool allowFn) { recordingShortcut = enabled; recordingFn = allowFn; }
-static NSString *labelResult;
-const char *buddymac_key_label(int keyCode) { labelResult = keyLabel((UInt16)keyCode); return labelResult.UTF8String; }
+static char *labelResult;
+const char *buddymac_key_label(int keyCode) { @autoreleasepool { return returned(&labelResult, keyLabel((UInt16)keyCode)); } }
 
-const char *buddymac_register_hotkeys(const char *json) {
+const char *buddymac_register_hotkeys(const char *json) { @autoreleasepool {
     if (!hotkeyHandler) {
         EventTypeSpec type = {kEventClassKeyboard, kEventHotKeyPressed};
         InstallApplicationEventHandler(NewEventHandlerUPP(hotkeyPressed), 1, &type, NULL, &hotkeyHandler);
@@ -328,21 +334,20 @@ const char *buddymac_register_hotkeys(const char *json) {
             next++;
         }
     }
-    hotkeyError = [failed componentsJoinedByString:@","];
-    return hotkeyError.UTF8String;
-}
+    return returned(&hotkeyError, [failed componentsJoinedByString:@","]);
+}}
 
 static NSString *statusTitle;
-void buddymac_status_title(const char *title) {
+void buddymac_status_title(const char *title) { @autoreleasepool {
     statusTitle = [NSString stringWithUTF8String:title];
     if (!statusItem) return;
     statusItem.button.title = statusTitle.length ? [@" " stringByAppendingString:statusTitle] : @"";
     statusItem.button.imagePosition = statusTitle.length ? NSImageLeft : NSImageOnly;
     statusItem.button.font = [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightMedium];
-}
+}}
 
-static NSString *pointerJSON;
-const char *buddymac_pointer_state(void) {
+static char *pointerJSON;
+const char *buddymac_pointer_state(void) { @autoreleasepool {
     NSPoint point = NSEvent.mouseLocation;
     NSMutableArray *screens = [NSMutableArray new];
     for (NSScreen *screen in NSScreen.screens) {
@@ -354,15 +359,14 @@ const char *buddymac_pointer_state(void) {
     NSDictionary *state = @{@"x": @(point.x), @"y": @(point.y), @"down": @((NSEvent.pressedMouseButtons & 1) != 0), @"screens": screens,
         @"window": window ? @{@"x": @(window.frame.origin.x), @"y": @(window.frame.origin.y), @"width": @(window.frame.size.width), @"height": @(window.frame.size.height), @"visible": @(window.visible), @"key": @(window.keyWindow)} : @{@"visible": @NO}};
     NSData *data = [NSJSONSerialization dataWithJSONObject:state options:0 error:nil];
-    pointerJSON = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    return pointerJSON.UTF8String;
-}
+    return returned(&pointerJSON, [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]);
+}}
 
-void buddymac_hide_window(void) { if (platform.mainWindow) [platform.mainWindow orderOut:nil]; }
-void buddymac_show_window(void) {
+void buddymac_hide_window(void) { @autoreleasepool { if (platform.mainWindow) [platform.mainWindow orderOut:nil]; } }
+void buddymac_show_window(void) { @autoreleasepool {
     [NSApp unhideWithoutActivation];
     [NSApp activateIgnoringOtherApps:YES];
     [platform.mainWindow makeKeyAndOrderFront:nil];
-}
-bool buddymac_window_visible(void) { return platform.mainWindow ? platform.mainWindow.visible : false; }
-bool buddymac_window_key(void) { return platform.mainWindow ? platform.mainWindow.keyWindow && NSApp.active : false; }
+}}
+bool buddymac_window_visible(void) { @autoreleasepool { return platform.mainWindow ? platform.mainWindow.visible : false; } }
+bool buddymac_window_key(void) { @autoreleasepool { return platform.mainWindow ? platform.mainWindow.keyWindow && NSApp.active : false; } }

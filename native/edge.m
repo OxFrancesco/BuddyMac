@@ -149,7 +149,7 @@ static void installEdge(void) {
     [NSRunLoop.mainRunLoop addTimer:edge.timer forMode:NSRunLoopCommonModes];
 }
 
-void buddymac_edge_configure(int side, bool pinned, bool autoShow, double delay, bool onlyFiles) {
+void buddymac_edge_configure(int side, bool pinned, bool autoShow, double delay, bool onlyFiles) { @autoreleasepool {
     installEdge();
     NSInteger oldSide = edge.side;
     edge.side = side >= 0 && side <= 2 ? side : 0;
@@ -162,33 +162,33 @@ void buddymac_edge_configure(int side, bool pinned, bool autoShow, double delay,
         edge.revealed = NO;
         [edge revealOn:[edge attachedScreen]];
     }
-}
+}}
 
-void buddymac_edge_files_active(bool active) {
+void buddymac_edge_files_active(bool active) { @autoreleasepool {
     installEdge();
     edge.filesActive = active;
     [edge reconcile];
-}
+}}
 
-void buddymac_edge_show(void) {
+void buddymac_edge_show(void) { @autoreleasepool {
     installEdge();
     [edge revealOn:[edge screenAt:NSEvent.mouseLocation]];
-}
+}}
 
-void buddymac_edge_presented(void) {
+void buddymac_edge_presented(void) { @autoreleasepool {
     edge.requested = NO;
     edge.revealed = YES;
     edge.lastInside = NSDate.timeIntervalSinceReferenceDate;
-}
+}}
 
 // Hides the shelf until the pointer leaves the edge and comes back, pinned or not.
-void buddymac_edge_dismiss(void) {
+void buddymac_edge_dismiss(void) { @autoreleasepool {
     installEdge();
     if (edge.window && edge.revealed) [edge.window orderOut:nil];
     edge.dismissed = YES;
     edge.revealed = NO;
     edge.requested = NO;
-}
+}}
 
 int buddymac_edge_side(void) { return (int)edge.side; }
 
