@@ -86,8 +86,8 @@ await writeFile(join(stage, "Contents/Info.plist"), `<?xml version="1.0" encodin
 <key>CFBundleExecutable</key><string>BuddyMac</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-<key>CFBundleShortVersionString</key><string>0.1.12</string>
-<key>CFBundleVersion</key><string>12</string>
+<key>CFBundleShortVersionString</key><string>0.1.13</string>
+<key>CFBundleVersion</key><string>13</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>LSUIElement</key><true/>
