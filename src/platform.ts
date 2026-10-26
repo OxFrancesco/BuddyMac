@@ -38,6 +38,7 @@ export function setLogin(enabled:boolean){if(!packaged)throw new Error("Open the
 
 const panes={
  microphone:'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+ camera:'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
  accessibility:'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
  screen:'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
  appManagement:'x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles',

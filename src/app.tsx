@@ -28,6 +28,8 @@ import { dispatchWindowKey, onWindowKey } from './keys'
 import { Palette, paletteKey } from './palette'
 import { takeoverFromLaunch } from './takeover'
 import { handleRecorderAction } from './recorder'
+import { CameraView } from './camera-view'
+import { closeCamera, toggleCameraPreview } from './camera'
 import { surfaces, useSurfaces, type SurfaceSettings } from './surfaces'
 initializePlatform()
 
@@ -41,6 +43,7 @@ function Panel({ section, pending, onPendingUsed, shown }: { section: Section; p
     case 'Write': return <WriteView />
     case 'Dock': return <DockView />
     case 'Liny': return <LinyView pending={pending} onPendingUsed={onPendingUsed} />
+    case 'Camera': return <CameraView />
     case 'Settings': return <SettingsView />
   }
 }
@@ -165,7 +168,7 @@ function App() {
       if (nav.get().paletteOpen && event.key && paletteKey(event.key)) return
       if (cmd && event.key === 'k') { nav.palette(!nav.get().paletteOpen); return }
       if (cmd && event.key === ',' && surfaceRef.current === 'main') { nav.go('Settings'); return }
-      if (cmd && event.key && /^[1-7]$/.test(event.key)) { const target = sections[Number(event.key) - 1]; if (target && surfaceRef.current === 'main') nav.go(target); return }
+      if (cmd && event.key && /^[1-8]$/.test(event.key)) { const target = sections[Number(event.key) - 1]; if (target && surfaceRef.current === 'main') nav.go(target); return }
       if (event.key === 'escape' && !event.modifiers?.cmd && (surfaceRef.current === 'liny' || (surfaceRef.current === 'notch' && !notchPin.pinned))) dismissFloating()
     }
     return onWindowKey(listener)
@@ -187,7 +190,8 @@ function App() {
       else if (action === 'focus-toggle') { const running = focusService.getSnapshot().data?.isRunning; void focusService.run(() => focus.timer(running ? 'pause' : 'start')).catch(report) }
       else if (action === 'focus-skip') void focusService.run(() => focus.timer('skip')).catch(report)
       else if (action === 'focus-panel') { notchArmed = false; change('notch') }
-      else if (action === 'quit') { stopFocusService(); closeSpeech(); liny.close(); process.exit(0) }
+      else if (action === 'camera-preview') void toggleCameraPreview()
+      else if (action === 'quit') { stopFocusService(); closeSpeech(); closeCamera(); liny.close(); process.exit(0) }
       else if (action.startsWith('{')) {
         try {
           const value: unknown = JSON.parse(action)

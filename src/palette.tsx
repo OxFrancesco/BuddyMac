@@ -7,6 +7,7 @@ import { speech } from './speech-state'
 import { liny } from './liny'
 import { refreshDock } from './dock'
 import { requestCompact } from './panel'
+import { toggleCameraPreview, toggleCameraRecording } from './camera'
 import { C, Empty, Field, Text, space } from './ui'
 
 interface Command { label: string; detail: string; keywords: string; run: () => unknown }
@@ -21,7 +22,9 @@ const keywords: Record<string, string> = {
   'Dock Icons': 'icon pack apply restore reopen', 'Dock New pack': 'artwork images create icns', 'Dock Settings': 'app management refresh keep applied',
   'Liny Chat': 'assistant ask ai message screen capture', 'Liny History': 'conversations sessions', 'Liny Memory': 'remember facts notes',
   'Liny Settings': 'provider codex openrouter model reasoning sidebar shortcut import',
-  'Settings General': 'login start search account', 'Settings Permissions': 'microphone accessibility screen recording notifications automation app management',
+  'Camera Capture': 'webcam usb video record preview mirror resolution fps frame rate', 'Camera Recordings': 'videos movies files play trash',
+  'Camera Settings': 'hevc h264 codec folder permission access',
+  'Settings General': 'login start search account', 'Settings Permissions': 'camera microphone accessibility screen recording notifications automation app management',
   'Settings Shortcuts': 'hotkeys keyboard', 'Settings Original apps': 'buddytalk buddywrite notchflow buddyfiles buddydock liny import takeover login items',
 }
 const commands: Command[] = [
@@ -37,6 +40,8 @@ const commands: Command[] = [
   { label: 'Open the compact timer', detail: 'Focus', keywords: 'small floating', run: () => requestCompact('focus') },
   { label: 'Open the Focus panel', detail: 'Focus', keywords: 'notch notchflow panel tasks timer ducks', run: () => requestCompact('notch') },
   { label: 'New Liny chat', detail: 'Liny', keywords: 'conversation reset', run: () => { nav.go('Liny', 'Chat'); void liny.reset() } },
+  { label: 'Show or hide the camera preview', detail: 'Camera', keywords: 'webcam bubble floating face overlay', run: () => void toggleCameraPreview() },
+  { label: 'Start or stop a camera recording', detail: 'Camera', keywords: 'webcam video record', run: () => void toggleCameraRecording() },
   { label: 'Refresh the Dock', detail: 'Dock', keywords: 'restart icons', run: () => void refreshDock() },
 ]
 

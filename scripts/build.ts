@@ -26,7 +26,7 @@ const identityLine = identities.split("\n").find(line => line.includes(`"${ident
 const identity = identityLine?.match(/\b([A-F0-9]{40})\b/)?.[1];
 if (!identity) throw new Error(`Code signing identity unavailable: ${identityName}. Run the build with access to the login Keychain.`);
 
-for (const script of ["build-platform.sh", "build-edge.sh", "build-panel.sh", "build-files.sh", "build-dock.sh", "build-focus.sh", "build-focus-app.sh", "build-speech.sh"]) {
+for (const script of ["build-platform.sh", "build-edge.sh", "build-panel.sh", "build-files.sh", "build-dock.sh", "build-focus.sh", "build-focus-app.sh", "build-speech.sh", "build-camera.sh"]) {
   await run(["/bin/zsh", join(root, "scripts", script)]);
 }
 await run([process.execPath, "native/liny/build.ts"]);
@@ -91,7 +91,8 @@ await writeFile(join(stage, "Contents/Info.plist"), `<?xml version="1.0" encodin
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>LSUIElement</key><true/>
-<key>NSMicrophoneUsageDescription</key><string>BuddyMac records your voice when you start dictation.</string>
+<key>NSMicrophoneUsageDescription</key><string>BuddyMac records your voice when you start dictation, and sound for camera recordings.</string>
+<key>NSCameraUsageDescription</key><string>BuddyMac shows and records the camera you choose in Camera.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>BuddyMac transcribes speech when you start dictation.</string>
 <key>NSAppleEventsUsageDescription</key><string>BuddyMac controls applications when you request a desktop action.</string>
 ${existsSync(icon) ? "<key>CFBundleIconFile</key><string>AppIcon</string>" : ""}
@@ -105,7 +106,7 @@ const sign = async (path: string, entitlementFile?: string) => {
 };
 await sign(framework);
 for (const file of await readdir(macos)) {
-  const permissions = file === "BuddyMac" ? entitlements : file === "buddymac-speech" ? join(root, "scripts/speech-entitlements.plist") : undefined;
+  const permissions = file === "BuddyMac" ? entitlements : file === "buddymac-speech" ? join(root, "scripts/speech-entitlements.plist") : file === "buddymac-camera" ? join(root, "scripts/camera-entitlements.plist") : undefined;
   await sign(join(macos, file), permissions);
 }
 await sign(packagedOCU);

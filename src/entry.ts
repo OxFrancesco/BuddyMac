@@ -23,7 +23,7 @@ if (process.argv.includes("--liny-worker")) {
     } finally { client.dispose(); }
     process.exit(0);
   } else if (process.argv.includes("--check-runtime")) {
-    const paths = ["gpuix-native.node", "libbuddymac.dylib", "libbuddymac-edge.dylib", "libbuddymac-panel.dylib", "buddymac-files", "buddymac-dock-applier", "buddymac-dock-inspector", "buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-speech", "buddymac-default-browser"];
+    const paths = ["gpuix-native.node", "libbuddymac.dylib", "libbuddymac-edge.dylib", "libbuddymac-panel.dylib", "buddymac-files", "buddymac-dock-applier", "buddymac-dock-inspector", "buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-speech", "buddymac-camera", "buddymac-default-browser"];
     for (const path of paths) if (!existsSync(join(executableDirectory, path))) throw new Error(`Missing bundled runtime: ${path}`);
     for (const path of ["fonts/ChakraPetch-Bold.ttf", "fonts/IBMPlexMono-Regular.ttf", "ducky/frame-00.png", "Open Computer Use.app/Contents/MacOS/OpenComputerUse"]) {
       if (!existsSync(join(resources, path))) throw new Error(`Missing bundled resource: ${path}`);
