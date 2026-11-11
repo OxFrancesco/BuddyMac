@@ -6,10 +6,10 @@ import { Button, Check, Choice, ErrorText, Group, Intro, Section, Setting, Text 
 
 const autoHideLabel = (seconds: number) => seconds === 0 ? 'Never' : seconds < 60 ? `${seconds} seconds` : '1 minute'
 const steps = [
-  'Turn on hidden icons. An arrow and a thin divider appear left of the BuddyMac icon.',
-  'Hold Command and drag any icon you rarely use to the left of the divider.',
-  'Click the arrow to hide those icons. Click it again to show them.',
-  'Keep the arrow and the BuddyMac icon right of the divider, or they hide too.',
+  'Turn on hidden icons. A thin divider appears left of the BuddyMac icon and an arrow right of it.',
+  'Click the arrow. Every icon left of the divider hides. Click it again to show them.',
+  'To keep an icon visible, hold Command and drag it right of the divider. Drag one left of it to hide it.',
+  'Keep the arrow right of the divider, or it hides too.',
 ]
 
 export function MenuBarView() {
@@ -27,7 +27,7 @@ export function MenuBarView() {
   const save = (change: Partial<MenuBarSettings>) => { setError(''); void surfaces.update(current => ({ ...current, menuBar: { ...current.menuBar, ...change } })).catch(cause => setError(cause instanceof Error ? cause.message : String(cause))) }
   const toggle = () => { setError(''); try { setState(toggleMenuBarIcons()) } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) } }
   return <Section title="Menu Bar" actions={menuBar.enabled ? <Button id="menubar-toggle" primary onClick={toggle}>{state === 1 ? 'Show icons' : 'Hide icons'}</Button> : null}>
-    <Intro text="Keep the menu bar tidy. Icons left of BuddyMac's divider stay hidden until you click the arrow. No Accessibility or Screen Recording access is needed." />
+    <Intro text="Keep the menu bar tidy. Icons left of the BuddyMac icon hide until you click the arrow next to it. No Accessibility or Screen Recording access is needed." />
     <ErrorText message={error} />
     <Group title="Hidden icons">
       <Setting label="Hide menu bar icons" detail={!menuBar.enabled ? 'Off' : state === 1 ? 'Icons left of the divider are hidden.' : 'Icons left of the divider are shown.'}>

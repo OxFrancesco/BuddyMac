@@ -6,6 +6,26 @@
 
 static NSMutableArray<NSString *> *actions;
 static NSStatusItem *statusItem;
+static NSString *statusTitle;
+static NSString *positionKey(NSString *name) { return [@"NSStatusItem Preferred Position " stringByAppendingString:name]; }
+// BuddyMac's icon used AppKit's default autosave name, Item-0. A fixed name keeps its place even when the icon is
+// rebuilt; the first launch with it carries the old position over so the icon does not move.
+static NSString *const mainItemName = @"BuddyMacIcon";
+static NSStatusItem *makeMainStatusItem(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    id previous = [defaults objectForKey:positionKey(@"Item-0")];
+    if (![defaults objectForKey:positionKey(mainItemName)] && [previous isKindOfClass:NSNumber.class]) [defaults setObject:previous forKey:positionKey(mainItemName)];
+    NSStatusItem *item = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+    item.autosaveName = mainItemName;
+    item.button.image = [NSImage imageWithSystemSymbolName:@"square.grid.2x2" accessibilityDescription:@"BuddyMac"];
+    return item;
+}
+static void applyStatusTitle(void) {
+    if (!statusItem) return;
+    statusItem.button.title = statusTitle.length ? [@" " stringByAppendingString:statusTitle] : @"";
+    statusItem.button.imagePosition = statusTitle.length ? NSImageLeft : NSImageOnly;
+    statusItem.button.font = [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightMedium];
+}
 static char *nextAction;
 static id eventMonitor;
 
@@ -132,8 +152,7 @@ void buddymac_init(const char *fontDirectory) { @autoreleasepool {
 void buddymac_menu(void) { @autoreleasepool {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     [[NSAppleEventManager sharedAppleEventManager] setEventHandler:platform andSelector:@selector(reopen:withReply:) forEventClass:kCoreEventClass andEventID:kAEReopenApplication];
-    statusItem=[[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
-    statusItem.button.image=[NSImage imageWithSystemSymbolName:@"square.grid.2x2" accessibilityDescription:@"BuddyMac"];
+    statusItem=makeMainStatusItem();
     NSMenu *menu=[NSMenu new];
     NSArray *focusItems=@[@[@"Start or Pause Timer",@"focus-toggle"],@[@"Skip Phase",@"focus-skip"],@[@"Show Focus Panel",@"focus-panel"]];
     for (NSArray *entry in focusItems) {
@@ -337,13 +356,9 @@ const char *buddymac_register_hotkeys(const char *json) { @autoreleasepool {
     return returned(&hotkeyError, [failed componentsJoinedByString:@","]);
 }}
 
-static NSString *statusTitle;
 void buddymac_status_title(const char *title) { @autoreleasepool {
     statusTitle = [NSString stringWithUTF8String:title];
-    if (!statusItem) return;
-    statusItem.button.title = statusTitle.length ? [@" " stringByAppendingString:statusTitle] : @"";
-    statusItem.button.imagePosition = statusTitle.length ? NSImageLeft : NSImageOnly;
-    statusItem.button.font = [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightMedium];
+    applyStatusTitle();
 }}
 
 // Menu bar icons. Two extra status items: an arrow that the user clicks, and a divider left of it. Icons the user
@@ -453,8 +468,24 @@ void buddymac_menubar_configure(bool enabled, double autoHide, bool collapse) { 
     }
     if (!menuBarArrow) {
         if (!menuBarTarget) menuBarTarget = [BuddyMacMenuBar new];
-        // New status items appear left of existing ones, so the arrow lands left of BuddyMac's icon and the divider left
-        // of the arrow. Autosave names make macOS remember where the user drags them.
+        // Without a saved position macOS puts new status items left of every other icon, which leaves nothing to hide.
+        // The first time, lay them out the way Ice does: the arrow at the right end next to the system icons, BuddyMac's
+        // icon left of it, then the divider, so every other icon starts on the hidden side. A smaller preferred
+        // position is further right. After that, the autosave names keep wherever the user Command-drags them.
+        NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+        NSString *layoutKey = @"BuddyMacMenuBarLayout";
+        if (statusItem && [defaults integerForKey:layoutKey] < 1) {
+            [defaults setDouble:0 forKey:positionKey(@"BuddyMacMenuBarArrow")];
+            [defaults setDouble:2 forKey:positionKey(@"BuddyMacMenuBarDivider")];
+            // Removing a status item can drop its saved position, so the icon's new one is written after removal.
+            NSMenu *menu = statusItem.menu;
+            [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
+            [defaults setDouble:1 forKey:positionKey(mainItemName)];
+            statusItem = makeMainStatusItem();
+            statusItem.menu = menu;
+            applyStatusTitle();
+            [defaults setInteger:1 forKey:layoutKey];
+        }
         menuBarArrow = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
         menuBarArrow.autosaveName = @"BuddyMacMenuBarArrow";
         menuBarArrow.button.target = menuBarTarget;
