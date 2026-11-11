@@ -20,7 +20,7 @@ const keywords: Record<string, string> = {
   'Write Settings': 'model output replace clipboard', 'Focus Tasks': 'todo pomodoro timer task project priority', 'Focus History': 'activity streak stats sessions graph',
   'Focus Check-ins': 'mood gratitude daily', 'Focus Settings': 'durations break notifications sound notch menu bar notchflow import',
   'Dock Icons': 'icon pack apply restore reopen', 'Dock New pack': 'artwork images create icns', 'Dock Settings': 'app management refresh keep applied',
-  'Menu Bar Icons': 'hide hidden status items icons ice bartender clutter divider separator collapse expand',
+  'Menu Bar Layout': 'hide show hidden status items icons ice bartender clutter arrange order move reset', 'Menu Bar Settings': 'divider separator collapse expand auto hide launch',
   'Camera Capture': 'webcam usb video record preview mirror resolution fps frame rate', 'Camera Recordings': 'videos movies files play trash',
   'Camera Settings': 'hevc h264 codec folder permission access',
   'Settings General': 'login start search account', 'Settings Permissions': 'camera microphone accessibility screen recording notifications automation app management',

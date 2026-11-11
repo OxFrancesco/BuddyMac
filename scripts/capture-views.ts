@@ -50,8 +50,9 @@ try{
  await app.getByTestId('nav-search').click();await app.getByTestId('palette-input').waitFor();await app.getByTestId('palette-input').fill('focus panel');await app.getByTestId('palette-item-0').click();await app.getByTestId('focus-panel').waitFor();await shot('notch-panel');await app.getByTestId('panel-expand').click();await Bun.sleep(500)
  await app.getByTestId('nav-Dock').click();await app.getByText('Fixture app').waitFor({timeoutMs:15000});await shot('dock-icons')
  await tab('dock','new-pack');await shot('dock-new-pack');await tab('dock','settings');await shot('dock-settings');await tab('dock','icons')
- await app.getByTestId('nav-Menu Bar').click();await app.getByTestId('menubar-enabled').waitFor();await shot('menubar-off')
+ await app.getByTestId('nav-Menu Bar').click();await app.getByTestId('menubar-tab-settings').click();await app.getByTestId('menubar-enabled').waitFor();await shot('menubar-off')
  await app.getByTestId('menubar-enabled').click();await app.getByTestId('menubar-toggle').waitFor();await shot('menubar-on')
+ await app.getByTestId('menubar-tab-layout').click();await Bun.sleep(800);await shot('menubar-layout')
  await app.getByTestId('nav-Settings').click();await Bun.sleep(500);await shot('settings-general')
  for(const name of ['ai','permissions','shortcuts','original-apps']){await tab('settings',name);await Bun.sleep(800);await shot(`settings-${name}`)}
  await app.getByTestId('nav-search').click();await app.getByTestId('palette-input').waitFor();await app.getByTestId('palette-input').fill('dict');await shot('palette')

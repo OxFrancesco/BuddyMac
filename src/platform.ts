@@ -24,6 +24,11 @@ const library=dlopen(resolve(root,'libbuddymac.dylib'),{
  buddymac_menubar_configure:{args:[FFIType.bool,FFIType.f64,FFIType.bool],returns:FFIType.void},
  buddymac_menubar_toggle:{args:[],returns:FFIType.int},
  buddymac_menubar_state:{args:[],returns:FFIType.int},
+ buddymac_menubar_reset:{args:[],returns:FFIType.void},
+ buddymac_menubar_scan:{args:[],returns:FFIType.void},
+ buddymac_menubar_layout:{args:[],returns:FFIType.cstring},
+ buddymac_menubar_move:{args:[FFIType.ptr,FFIType.bool],returns:FFIType.int},
+ buddymac_accessibility:{args:[FFIType.bool],returns:FFIType.bool},
 })
 function cString(value:string){return Buffer.from(value+'\0')}
 export function initializePlatform(){const path=cString(packaged?resolve(root,'../Resources/fonts'):resolve(import.meta.dir,'../assets/fonts'));library.symbols.buddymac_init(ptr(path))}
@@ -79,3 +84,12 @@ export type MenuBarState=-1|0|1
 export const configureMenuBar=(enabled:boolean,autoHideSeconds:number,collapse:boolean)=>library.symbols.buddymac_menubar_configure(enabled,autoHideSeconds,collapse)
 export const toggleMenuBar=()=>library.symbols.buddymac_menubar_toggle() as MenuBarState
 export const menuBarState=()=>library.symbols.buddymac_menubar_state() as MenuBarState
+export const resetMenuBar=()=>library.symbols.buddymac_menubar_reset()
+export const scanMenuBar=()=>library.symbols.buddymac_menubar_scan()
+export interface MenuBarIcon{key:string;name:string;detail:string;bundleId:string;icon:string;hidden:boolean;own:boolean;x:number}
+export interface MenuBarLayout{trusted:boolean;scanning:boolean;moving:boolean;scans:number;items:MenuBarIcon[]}
+export const menuBarLayout=():MenuBarLayout=>JSON.parse(String(library.symbols.buddymac_menubar_layout()))
+/** 1 started, 0 another move is running, -1 arrow and divider are off, -2 Accessibility is not allowed. */
+export const moveMenuBarIcon=(key:string,hide:boolean)=>library.symbols.buddymac_menubar_move(ptr(cString(key)),hide)
+/** Whether BuddyMac itself may use Accessibility. `prompt` shows macOS's request once. */
+export const accessibilityAllowed=(prompt=false)=>library.symbols.buddymac_accessibility(prompt)

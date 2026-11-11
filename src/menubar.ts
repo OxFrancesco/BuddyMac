@@ -17,3 +17,8 @@ export function applyMenuBar(settings: MenuBarSettings, loaded: boolean) {
 
 export function toggleMenuBarIcons(): MenuBarState { return toggleMenuBar() }
 export const currentMenuBarState = (): MenuBarState => menuBarState()
+
+const moveListeners = new Set<(result: { ok: boolean; message: string }) => void>()
+/** The native move reports back through the platform action queue; the Layout tab listens here. */
+export function onMenuBarMoved(listener: (result: { ok: boolean; message: string }) => void) { moveListeners.add(listener); return () => { moveListeners.delete(listener) } }
+export function menuBarMoved(result: { ok: boolean; message: string }) { for (const listener of moveListeners) listener(result) }

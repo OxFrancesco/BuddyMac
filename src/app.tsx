@@ -30,7 +30,7 @@ import { CameraView } from './camera-view'
 import { closeCamera, toggleCameraPreview } from './camera'
 import { surfaces, useSurfaces } from './surfaces'
 import { MenuBarView } from './menubar-view'
-import { applyMenuBar, misplacedMessage } from './menubar'
+import { applyMenuBar, menuBarMoved, misplacedMessage } from './menubar'
 initializePlatform()
 
 type Surface = 'main' | 'hidden' | 'files' | 'focus' | 'talk' | 'notch'
@@ -126,7 +126,8 @@ function App() {
   }), [renderer])
 
   // Hides or shows the menu bar icons left of BuddyMac's divider, and keeps the divider in step with Settings.
-  useEffect(() => { if (process.env.GPUIX_BACKGROUND !== '1') try { applyMenuBar(layout.menuBar, surfaces.isLoaded()) } catch (cause) { report(cause) } }, [layout.menuBar])
+  // BUDDYMAC_VERIFY_MENUBAR=1 lets scripts/verify-menubar-layout.ts drive the real arrow and divider in automation.
+  useEffect(() => { if (process.env.GPUIX_BACKGROUND !== '1' || process.env.BUDDYMAC_VERIFY_MENUBAR === '1') try { applyMenuBar(layout.menuBar, surfaces.isLoaded()) } catch (cause) { report(cause) } }, [layout.menuBar])
 
 
   useEffect(() => {
@@ -166,6 +167,7 @@ function App() {
             const record = value as Record<string, unknown>
             if (handleRecorderAction(record)) {}
             else if (record.action === 'menubar-misplaced') setError(misplacedMessage)
+            else if (record.action === 'menubar-moved') menuBarMoved({ ok: record.ok === true, message: typeof record.message === 'string' ? record.message : '' })
             else if (record.action === 'files-drag-completed' && Array.isArray(record.paths) && record.paths.every((path: unknown) => typeof path === 'string')) void removeFiles(record.paths as string[]).catch(report)
           }
         } catch (cause) { report(cause) }

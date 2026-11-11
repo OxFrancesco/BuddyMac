@@ -52,7 +52,7 @@ New installations start empty. BuddyMac does not automatically import settings, 
 - Files: Settings selects a normal window or a left/right edge shelf.
 - Focus and Talk: Compact timer / Compact recorder opens a small floating view; Expand restores the full window.
 - Dock: select saved artwork to apply it. Keep selected icons applied enables periodic repair; Stop automatic reapplication disables it.
-- Menu Bar: turn on Hide menu bar icons. An arrow and a thin divider appear left of the BuddyMac icon. Command-drag icons left of the divider, then click the arrow to hide or show them. Shown icons hide again after the chosen delay. No Accessibility or Screen Recording access is needed.
+- Menu Bar: turn on Hide menu bar icons. An arrow and a thin divider appear left of the BuddyMac icon. Command-drag icons left of the divider, then click the arrow to hide or show them. Shown icons hide again after the chosen delay. Menu Bar › Layout lists every icon and moves it to the shown or hidden side for you (it needs Accessibility, and Command-drags the icon itself). `bun scripts/verify-menubar-layout.ts <bundleId> <name>` checks a live move and back against the installed app.
 - Start at login is opt-in. Closing the window keeps the menu-bar app running; Quit is in the menu-bar menu.
 
 Data lives under `~/Library/Application Support/BuddyMac`. Existing utilities and startup settings remain intact. [Workflow coverage](docs/parity.md) lists remaining feature and verification gaps. Public releases are Developer ID signed and notarized.

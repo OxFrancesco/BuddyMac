@@ -3,6 +3,7 @@
 #import <ServiceManagement/ServiceManagement.h>
 #import <Carbon/Carbon.h>
 #import <objc/runtime.h>
+#import <ApplicationServices/ApplicationServices.h>
 
 static NSMutableArray<NSString *> *actions;
 static NSStatusItem *statusItem;
@@ -363,13 +364,15 @@ void buddymac_status_title(const char *title) { @autoreleasepool {
 
 // Menu bar icons. Two extra status items: an arrow that the user clicks, and a divider left of it. Icons the user
 // Command-drags left of the divider are hidden by stretching the divider to 10,000 points, which pushes them past
-// the left edge of the menu bar. Nothing reads or moves other apps' items, so no Accessibility or Screen Recording.
+// the left edge of the menu bar. Hiding and showing need no permissions; the Layout tab's list and moves use Accessibility.
 static const CGFloat dividerHiddenLength = 10000;
 static NSStatusItem *menuBarArrow, *menuBarDivider;
 static BOOL menuBarCollapsed;
 static NSTimeInterval menuBarAutoHide;
 static NSTimer *menuBarTimer, *menuBarPlacement;
 static int menuBarPlacementTries;
+static BOOL menuBarMoving;
+static NSString *const menuBarLayoutKey = @"BuddyMacMenuBarLayout";
 static void menuBarCollapse(BOOL collapse);
 
 @interface BuddyMacMenuBar : NSObject
@@ -384,7 +387,7 @@ static void menuBarCollapse(BOOL collapse);
     NSPoint point = NSEvent.mouseLocation;
     BOOL inMenuBar = NO;
     for (NSScreen *screen in NSScreen.screens) if (NSPointInRect(point, screen.frame) && point.y >= NSMaxY(screen.visibleFrame)) inMenuBar = YES;
-    if (inMenuBar || NSEvent.pressedMouseButtons != 0) {
+    if (inMenuBar || menuBarMoving || NSEvent.pressedMouseButtons != 0) {
         menuBarTimer = [NSTimer timerWithTimeInterval:2 target:self selector:@selector(autoHide:) userInfo:nil repeats:NO];
         [NSRunLoop.mainRunLoop addTimer:menuBarTimer forMode:NSRunLoopCommonModes];
         return;
@@ -473,8 +476,7 @@ void buddymac_menubar_configure(bool enabled, double autoHide, bool collapse) { 
         // icon left of it, then the divider, so every other icon starts on the hidden side. A smaller preferred
         // position is further right. After that, the autosave names keep wherever the user Command-drags them.
         NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-        NSString *layoutKey = @"BuddyMacMenuBarLayout";
-        if (statusItem && [defaults integerForKey:layoutKey] < 1) {
+        if (statusItem && [defaults integerForKey:menuBarLayoutKey] < 1) {
             [defaults setDouble:0 forKey:positionKey(@"BuddyMacMenuBarArrow")];
             [defaults setDouble:2 forKey:positionKey(@"BuddyMacMenuBarDivider")];
             // Removing a status item can drop its saved position, so the icon's new one is written after removal.
@@ -484,7 +486,7 @@ void buddymac_menubar_configure(bool enabled, double autoHide, bool collapse) { 
             statusItem = makeMainStatusItem();
             statusItem.menu = menu;
             applyStatusTitle();
-            [defaults setInteger:1 forKey:layoutKey];
+            [defaults setInteger:1 forKey:menuBarLayoutKey];
         }
         menuBarArrow = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
         menuBarArrow.autosaveName = @"BuddyMacMenuBarArrow";
@@ -504,6 +506,270 @@ int buddymac_menubar_toggle(void) { @autoreleasepool {
     return menuBarCollapsed ? 1 : 0;
 }}
 int buddymac_menubar_state(void) { return menuBarArrow ? (menuBarCollapsed ? 1 : 0) : -1; }
+
+// Puts the arrow, BuddyMac's icon and the divider back in their first-use places at the right end of the menu bar.
+void buddymac_menubar_reset(void) { @autoreleasepool {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    BOOL enabled = menuBarArrow != nil, collapsed = menuBarCollapsed;
+    NSTimeInterval autoHide = menuBarAutoHide;
+    if (enabled) buddymac_menubar_configure(false, autoHide, false);
+    [defaults setInteger:0 forKey:menuBarLayoutKey];
+    if (enabled) buddymac_menubar_configure(true, autoHide, collapsed);
+}}
+
+// Layout: every app's menu bar icons, read through Accessibility (AXExtrasMenuBar), and moves across the divider made
+// the way a person would, with a Command-drag. On macOS 26 every icon window belongs to Control Centre, so only
+// Accessibility tells which app owns an icon. A full read takes a few seconds, so it runs off the main thread.
+static dispatch_queue_t layoutQueue;
+static NSObject *layoutLock;
+static NSString *layoutItems = @"[]";
+static BOOL layoutScanning;
+static NSInteger layoutScans;
+static char *layoutResult;
+
+static NSString *axString(AXUIElementRef element, CFStringRef attribute) {
+    CFTypeRef value = NULL;
+    if (AXUIElementCopyAttributeValue(element, attribute, &value) != kAXErrorSuccess || !value) return @"";
+    NSString *text = CFGetTypeID(value) == CFStringGetTypeID() ? [(__bridge NSString *)value copy] : @"";
+    CFRelease(value);
+    return [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
+
+static NSString *iconCache(void) {
+    NSString *base = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject ?: NSTemporaryDirectory();
+    NSString *directory = [base stringByAppendingPathComponent:@"org.buddytools.BuddyMac/menubar-icons"];
+    [NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+    return directory;
+}
+
+// GPUix's <img> reads PNG files, so each app's icon is written once at 64 pixels.
+static NSString *appIconPath(NSRunningApplication *app, NSString *bundle) {
+    if (!bundle.length) return @"";
+    NSString *path = [[iconCache() stringByAppendingPathComponent:bundle] stringByAppendingPathExtension:@"png"];
+    if ([NSFileManager.defaultManager fileExistsAtPath:path]) return path;
+    NSImage *icon = app.icon;
+    if (!icon) return @"";
+    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:64 pixelsHigh:64 bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:0 bitsPerPixel:0];
+    [NSGraphicsContext saveGraphicsState];
+    NSGraphicsContext.currentContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:bitmap];
+    [icon drawInRect:NSMakeRect(0, 0, 64, 64) fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1];
+    [NSGraphicsContext restoreGraphicsState];
+    NSData *png = [bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+    return [png writeToFile:path atomically:YES] ? path : @"";
+}
+
+typedef NS_ENUM(NSInteger, BarItemRole) { BarItemOther, BarItemIcon, BarItemArrow, BarItemDivider, BarItemFixed };
+
+// Every menu bar icon, left to right, with its AX element, frame and a key that survives a rescan.
+static NSArray<NSDictionary *> *readMenuBar(void) {
+    NSMutableArray<NSDictionary *> *items = [NSMutableArray new];
+    pid_t me = getpid();
+    for (NSRunningApplication *app in NSWorkspace.sharedWorkspace.runningApplications) {
+        pid_t pid = app.processIdentifier;
+        if (pid <= 0) continue;
+        AXUIElementRef application = AXUIElementCreateApplication(pid);
+        // A hung app must not stall the whole read.
+        AXUIElementSetMessagingTimeout(application, 0.25);
+        CFTypeRef bar = NULL, children = NULL;
+        if (AXUIElementCopyAttributeValue(application, CFSTR("AXExtrasMenuBar"), &bar) == kAXErrorSuccess && bar
+            && AXUIElementCopyAttributeValue((AXUIElementRef)bar, kAXChildrenAttribute, &children) == kAXErrorSuccess && children
+            && CFGetTypeID(children) == CFArrayGetTypeID()) {
+            NSString *bundle = app.bundleIdentifier ?: @"";
+            for (id child in (__bridge NSArray *)children) {
+                AXUIElementRef element = (__bridge AXUIElementRef)child;
+                CGPoint point = CGPointZero; CGSize size = CGSizeZero; CFTypeRef value = NULL;
+                if (AXUIElementCopyAttributeValue(element, kAXPositionAttribute, &value) == kAXErrorSuccess && value) { AXValueGetValue((AXValueRef)value, kAXValueTypeCGPoint, &point); CFRelease(value); }
+                value = NULL;
+                if (AXUIElementCopyAttributeValue(element, kAXSizeAttribute, &value) == kAXErrorSuccess && value) { AXValueGetValue((AXValueRef)value, kAXValueTypeCGSize, &size); CFRelease(value); }
+                if (size.width <= 0 || size.height <= 0) continue;
+                NSString *description = axString(element, kAXDescriptionAttribute), *title = axString(element, kAXTitleAttribute), *identifier = axString(element, kAXIdentifierAttribute);
+                BarItemRole role = BarItemOther;
+                if (pid == me) role = [description containsString:@"menu bar icons"] ? BarItemArrow : [description isEqualToString:@"BuddyMac"] ? BarItemIcon : BarItemDivider;
+                // The clock and Control Centre are pinned to the right end by macOS.
+                else if ([identifier isEqualToString:@"com.apple.menuextra.clock"] || [identifier isEqualToString:@"com.apple.menuextra.controlcenter"]) role = BarItemFixed;
+                [items addObject:@{@"element": child, @"pid": @(pid), @"bundle": pid == me ? @"org.buddytools.BuddyMac" : bundle, @"app": app.localizedName ?: bundle,
+                    @"description": description, @"title": title, @"identifier": identifier, @"role": @(role), @"iconPath": appIconPath(app, bundle),
+                    @"frame": [NSValue valueWithRect:NSMakeRect(point.x, point.y, size.width, size.height)]}];
+            }
+        }
+        if (children) CFRelease(children);
+        if (bar) CFRelease(bar);
+        CFRelease(application);
+    }
+    [items sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        CGFloat x = [a[@"frame"] rectValue].origin.x, y = [b[@"frame"] rectValue].origin.x;
+        return x < y ? NSOrderedAscending : x > y ? NSOrderedDescending : NSOrderedSame;
+    }];
+    // Same app and label can repeat (two Control Centre icons without a label), so the key adds a running count.
+    NSMutableDictionary<NSString *, NSNumber *> *seen = [NSMutableDictionary new];
+    NSMutableArray<NSDictionary *> *keyed = [NSMutableArray new];
+    for (NSDictionary *item in items) {
+        NSString *label = [item[@"identifier"] length] ? item[@"identifier"] : item[@"description"];
+        NSString *base = [NSString stringWithFormat:@"%@|%@", item[@"bundle"], label];
+        NSInteger count = seen[base].integerValue; seen[base] = @(count + 1);
+        NSMutableDictionary *copy = [item mutableCopy]; copy[@"key"] = [NSString stringWithFormat:@"%@|%ld", base, (long)count];
+        [keyed addObject:copy];
+    }
+    return keyed;
+}
+
+static NSDictionary *barItem(NSArray<NSDictionary *> *items, BarItemRole role) {
+    for (NSDictionary *item in items) if ([item[@"role"] integerValue] == role) return item;
+    return nil;
+}
+static NSDictionary *barItemWithKey(NSArray<NSDictionary *> *items, NSString *key) {
+    for (NSDictionary *item in items) if ([item[@"key"] isEqualToString:key]) return item;
+    return nil;
+}
+// Hidden icons sit left of the divider's right edge, whether the divider is short (shown) or stretched (hidden).
+static BOOL itemHidden(NSDictionary *item, NSDictionary *divider) {
+    return divider && NSMidX([item[@"frame"] rectValue]) < NSMaxX([divider[@"frame"] rectValue]);
+}
+
+static NSString *layoutJSON(NSArray<NSDictionary *> *items) {
+    NSDictionary *divider = barItem(items, BarItemDivider);
+    NSMutableArray *rows = [NSMutableArray new];
+    for (NSDictionary *item in items) {
+        BarItemRole role = [item[@"role"] integerValue];
+        if (role == BarItemArrow || role == BarItemDivider || role == BarItemFixed) continue;
+        NSString *bundle = item[@"bundle"], *description = item[@"description"], *title = item[@"title"], *app = item[@"app"];
+        BOOL system = [bundle hasPrefix:@"com.apple."];
+        NSString *name = role == BarItemIcon ? @"BuddyMac" : system && description.length ? description : app.length ? app : bundle;
+        NSString *detail = role == BarItemIcon ? @"This app" : system ? app : title.length ? title : description.length && ![description isEqualToString:name] ? description : bundle;
+        [rows addObject:@{@"key": item[@"key"], @"name": name ?: @"", @"detail": detail ?: @"", @"bundleId": bundle, @"icon": item[@"iconPath"],
+            @"hidden": @(itemHidden(item, divider)), @"own": @(role == BarItemIcon), @"x": @([item[@"frame"] rectValue].origin.x)}];
+    }
+    NSData *data = [NSJSONSerialization dataWithJSONObject:rows options:0 error:nil];
+    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+}
+
+static void publishLayout(NSArray<NSDictionary *> *items) {
+    NSString *json = layoutJSON(items);
+    @synchronized (layoutLock) { layoutItems = json; layoutScans++; }
+}
+
+static void layoutSetup(void) {
+    if (layoutQueue) return;
+    layoutQueue = dispatch_queue_create("org.buddytools.BuddyMac.menubar-layout", DISPATCH_QUEUE_SERIAL);
+    layoutLock = [NSObject new];
+}
+
+bool buddymac_accessibility(bool prompt) { @autoreleasepool {
+    return AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)@{(__bridge NSString *)kAXTrustedCheckOptionPrompt: @(prompt)});
+}}
+
+// Starts a fresh read unless one is running. The result arrives in buddymac_menubar_layout.
+void buddymac_menubar_scan(void) { @autoreleasepool {
+    layoutSetup();
+    if (!AXIsProcessTrusted()) return;
+    @synchronized (layoutLock) { if (layoutScanning || menuBarMoving) return; layoutScanning = YES; }
+    dispatch_async(layoutQueue, ^{ @autoreleasepool {
+        NSArray *items = readMenuBar();
+        publishLayout(items);
+        @synchronized (layoutLock) { layoutScanning = NO; }
+    }});
+}}
+
+const char *buddymac_menubar_layout(void) { @autoreleasepool {
+    layoutSetup();
+    NSString *items; BOOL scanning; NSInteger scans;
+    @synchronized (layoutLock) { items = layoutItems; scanning = layoutScanning || menuBarMoving; scans = layoutScans; }
+    NSString *json = [NSString stringWithFormat:@"{\"trusted\":%@,\"scanning\":%@,\"moving\":%@,\"scans\":%ld,\"items\":%@}",
+        AXIsProcessTrusted() ? @"true" : @"false", scanning ? @"true" : @"false", menuBarMoving ? @"true" : @"false", (long)scans, items];
+    return returned(&layoutResult, json);
+}}
+
+static void postMouse(CGEventSourceRef source, CGEventType type, CGPoint point) {
+    CGEventRef event = CGEventCreateMouseEvent(source, type, point, kCGMouseButtonLeft);
+    CGEventSetFlags(event, kCGEventFlagMaskCommand);
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+static void postCommand(CGEventSourceRef source, BOOL down) {
+    CGEventRef event = CGEventCreateKeyboardEvent(source, (CGKeyCode)kVK_Command, down);
+    CGEventSetFlags(event, down ? kCGEventFlagMaskCommand : 0);
+    CGEventPost(kCGHIDEventTap, event);
+    CFRelease(event);
+}
+
+// The top edge, in global top-left coordinates, of the display whose menu bar holds this point.
+static CGFloat displayTop(CGFloat x) {
+    uint32_t count = 0; CGDirectDisplayID displays[16];
+    CGGetActiveDisplayList(16, displays, &count);
+    for (uint32_t index = 0; index < count; index++) {
+        CGRect bounds = CGDisplayBounds(displays[index]);
+        if (x >= CGRectGetMinX(bounds) && x < CGRectGetMaxX(bounds)) return CGRectGetMinY(bounds);
+    }
+    return 0;
+}
+
+static void finishMove(NSArray<NSDictionary *> *items, BOOL wasCollapsed, BOOL ok, NSString *message) {
+    if (items) publishLayout(items);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        menuBarMoving = NO;
+        if (wasCollapsed && menuBarArrow) menuBarCollapse(YES);
+        NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"action": @"menubar-moved", @"ok": @(ok), @"message": message ?: @""} options:0 error:nil];
+        [actions addObject:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
+    });
+}
+
+// Moves one icon to the hidden or the shown side. Returns 1 when started, 0 while another move runs, -1 when the
+// arrow and divider are off, -2 without Accessibility. The outcome arrives as a menubar-moved action.
+int buddymac_menubar_move(const char *keyText, bool hide) { @autoreleasepool {
+    layoutSetup();
+    if (!menuBarArrow) return -1;
+    if (!AXIsProcessTrusted()) return -2;
+    if (menuBarMoving) return 0;
+    NSString *key = [NSString stringWithUTF8String:keyText];
+    menuBarMoving = YES;
+    BOOL wasCollapsed = menuBarCollapsed;
+    // Hidden icons are off screen. Show them for the move; they hide again afterwards if they were hidden.
+    if (wasCollapsed) menuBarCollapse(NO);
+    dispatch_async(layoutQueue, ^{ @autoreleasepool {
+        usleep(400000);
+        NSArray<NSDictionary *> *items = readMenuBar();
+        NSDictionary *item = barItemWithKey(items, key), *divider = barItem(items, BarItemDivider);
+        if (!item || !divider) { finishMove(items, wasCollapsed, NO, item ? @"The BuddyMac divider is not in the menu bar." : @"That icon is no longer in the menu bar."); return; }
+        if (itemHidden(item, divider) == hide) { finishMove(items, wasCollapsed, YES, @""); return; }
+        CGEventRef now = CGEventCreate(NULL);
+        CGPoint original = CGEventGetLocation(now);
+        CFRelease(now);
+        CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateCombinedSessionState);
+        // An auto-hidden menu bar only takes clicks once it has slid down: rest the pointer on the top edge first.
+        CGRect dividerFrame = [divider[@"frame"] rectValue];
+        CGPoint reveal = CGPointMake(NSMidX(dividerFrame), displayTop(NSMidX(dividerFrame)) + 1);
+        CGWarpMouseCursorPosition(reveal);
+        postMouse(source, kCGEventMouseMoved, reveal);
+        usleep(1000000);
+        items = readMenuBar();
+        item = barItemWithKey(items, key); divider = barItem(items, BarItemDivider);
+        if (!item || !divider) { CGWarpMouseCursorPosition(original); CFRelease(source); finishMove(items, wasCollapsed, NO, @"The menu bar changed during the move. Try again."); return; }
+        CGRect itemFrame = [item[@"frame"] rectValue];
+        dividerFrame = [divider[@"frame"] rectValue];
+        // Dropping on the divider's left edge puts the icon left of it (hidden); its right edge, right of it (shown).
+        CGPoint start = CGPointMake(NSMidX(itemFrame), NSMidY(itemFrame));
+        CGPoint end = CGPointMake(hide ? NSMinX(dividerFrame) + 1 : NSMaxX(dividerFrame) - 1, NSMidY(dividerFrame));
+        postCommand(source, YES); usleep(50000);
+        CGWarpMouseCursorPosition(start); postMouse(source, kCGEventMouseMoved, start); usleep(50000);
+        postMouse(source, kCGEventLeftMouseDown, start); usleep(300000);
+        for (int step = 1; step <= 12; step++) {
+            CGFloat t = step / 12.0;
+            postMouse(source, kCGEventLeftMouseDragged, CGPointMake(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t));
+            usleep(25000);
+        }
+        usleep(200000);
+        postMouse(source, kCGEventLeftMouseUp, end); usleep(50000);
+        postCommand(source, NO);
+        CGWarpMouseCursorPosition(original);
+        CFRelease(source);
+        usleep(700000);
+        items = readMenuBar();
+        item = barItemWithKey(items, key); divider = barItem(items, BarItemDivider);
+        BOOL moved = item && divider && itemHidden(item, divider) == hide;
+        finishMove(items, wasCollapsed, moved, moved ? @"" : @"macOS did not move that icon. Some system icons cannot move; others can be Command-dragged by hand.");
+    }});
+    return 1;
+}}
 
 static char *pointerJSON;
 const char *buddymac_pointer_state(void) { @autoreleasepool {
