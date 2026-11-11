@@ -37,11 +37,11 @@ function General({ run }: { run: (work: () => Promise<unknown>) => Promise<void>
     <Group title="BuddyMac">
       <Setting label="Start at login" detail="BuddyMac opens in the menu bar when you log in."><Check id="settings-login" label={atLogin ? 'On' : 'Off'} checked={atLogin} onChange={next => void run(async () => setAtLogin(setLogin(next)))} /></Setting>
       <Setting label="Find anything" detail="Press Command K anywhere in BuddyMac to jump to a tool, a tab or an action."><Button id="settings-open-search" onClick={() => nav.palette(true)}>Open search</Button></Setting>
-      <Setting label="Closing the window" detail="BuddyMac keeps running in the menu bar. Edge shelves, the Liny sidebar and shortcuts work while the window is closed." />
+      <Setting label="Closing the window" detail="BuddyMac keeps running in the menu bar. Edge shelves, the menu bar divider and shortcuts work while the window is closed." />
     </Group>
     <Group title="Always available">
       <Setting label="Files shelf at the screen edge" detail="Set the side and behaviour in Files."><Button onClick={() => nav.go('Files', 'Settings')}>Files settings</Button></Setting>
-      <Setting label="Liny sidebar" detail={layout.linySidebar.enabled ? `Hover the ${layout.linySidebar.edge} edge to open it.` : 'Off'}><Button onClick={() => nav.go('Liny', 'Settings')}>Liny settings</Button></Setting>
+      <Setting label="Hidden menu bar icons" detail={layout.menuBar.enabled ? 'Click the arrow in the menu bar to show or hide them.' : 'Off'}><Button onClick={() => nav.go('Menu Bar')}>Menu Bar settings</Button></Setting>
       <Setting label="Focus timer under the notch" detail={layout.focusNotch ? 'Hover the notch to see the timer.' : 'Off'}><Button onClick={() => nav.go('Focus', 'Settings')}>Focus settings</Button></Setting>
     </Group>
     <Group title="Account">
@@ -59,7 +59,7 @@ function Permissions({ run }: { run: (work: () => Promise<unknown>) => Promise<v
     <Setting label="Microphone" detail={`${status(s.status?.microphoneGranted)}. Talk records your voice.`}><Button onClick={() => openSettingsPane('microphone')}>Open settings</Button></Setting>
     <Setting label="Camera" detail="Camera previews and records from any connected camera."><Button onClick={() => openSettingsPane('camera')}>Open settings</Button></Setting>
     <Setting label="Accessibility" detail={`${status(s.status?.accessibilityGranted)}. Lets Talk and Write type into other apps. Without it, text goes to the clipboard.`}>{s.status?.accessibilityGranted ? null : <Button onClick={() => void run(async () => { await speech().requestAccessibility(); await s.refresh() })}>Allow</Button>}<Button onClick={() => openSettingsPane('accessibility')}>Open settings</Button></Setting>
-    <Setting label="Screen Recording" detail={`${status(s.status?.screenCaptureGranted)}. Screen context for Talk and Liny, and region capture.`}>{s.status?.screenCaptureGranted ? null : <Button onClick={() => void run(async () => { await speech().requestScreenCapture(); await s.refresh() })}>Allow</Button>}<Button onClick={() => openSettingsPane('screen')}>Open settings</Button></Setting>
+    <Setting label="Screen Recording" detail={`${status(s.status?.screenCaptureGranted)}. Screen context for Talk.`}>{s.status?.screenCaptureGranted ? null : <Button onClick={() => void run(async () => { await speech().requestScreenCapture(); await s.refresh() })}>Allow</Button>}<Button onClick={() => openSettingsPane('screen')}>Open settings</Button></Setting>
     <Setting label="Notifications" detail={`${notifications === 'authorized' ? 'Allowed' : notifications === 'denied' ? 'Not allowed' : notifications ? 'Not asked yet' : 'Checking'}. Focus tells you when a phase ends.`}>{notifications === 'authorized' ? null : <Button onClick={() => void run(async () => { await focus.notificationPermission(); setNotifications((await focusNotificationStatus()).authorizationStatus) })}>Allow</Button>}<Button onClick={() => openSettingsPane('notifications')}>Open settings</Button></Setting>
     <Setting label="App Management" detail="Dock needs it to change other apps' icons."><Button onClick={() => openSettingsPane('appManagement')}>Open settings</Button></Setting>
     <Setting label="Automation" detail="Used once to turn off the original apps' login items, and by Dock to reopen apps."><Button onClick={() => openSettingsPane('automation')}>Open settings</Button></Setting>
@@ -68,7 +68,6 @@ function Permissions({ run }: { run: (work: () => Promise<unknown>) => Promise<v
 
 function Shortcuts() {
   const prefs = useTalkPrefs()
-  const layout = useSurfaces()
   const s = useSpeech()
   const [writing, setWriting] = useState<WritingState | null>(null)
   useEffect(() => { void talkPrefs.load(); void speech().writing().then(setWriting).catch(() => {}) }, [])
@@ -88,11 +87,6 @@ function Shortcuts() {
       {writing?.profiles.filter(profile => profile.hotkey).map(profile => <Setting key={profile.id} label={`Rewrite with ${profile.name}`} detail={profile.isEnabled ? undefined : 'Off'}><Text muted>{cocoaLabel(profile.hotkey)}</Text></Setting>)}
       {writing?.notes.filter(note => note.hotkey).map(note => <Setting key={note.id} label={`Paste ${note.title}`}><Text muted>{cocoaLabel(note.hotkey)}</Text></Setting>)}
       <Row style={{ paddingTop: 12, flexShrink: 0 }}><Button onClick={() => nav.go('Write', 'Profiles')}>Change Write shortcuts</Button></Row>
-    </Group>
-    <Group title="Liny">
-      <Setting label="Open Liny"><Text muted>{cocoaLabel(layout.linyShortcuts.open)}</Text></Setting>
-      <Setting label="Capture a screen region"><Text muted>{cocoaLabel(layout.linyShortcuts.capture)}</Text></Setting>
-      <Row style={{ paddingTop: 12, flexShrink: 0 }}><Button onClick={() => nav.go('Liny', 'Settings')}>Change Liny shortcuts</Button></Row>
     </Group>
     <Group title="Inside BuddyMac">
       <Setting label="Search"><Text muted>Command + K</Text></Setting>

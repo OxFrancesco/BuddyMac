@@ -3,7 +3,7 @@ import { mkdtemp, mkdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
 const root = await mkdtemp('/private/tmp/buddymac-focus-ui-')
-const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_FOCUS_DISABLE_ALERTS: '1', BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'), BUDDYMAC_LEGACY_FILES_DIR: join(root, 'none'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'no-pack.json') }
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_FOCUS_DISABLE_ALERTS: '1', BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LEGACY_FILES_DIR: join(root, 'none'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'no-pack.json') }
 async function call(command: string, payload?: unknown, now?: number) {
  const child = Bun.spawn([resolve('dist/buddymac-focus'), command], { env: { ...env, ...(now === undefined ? {} : { BUDDYMAC_FOCUS_TEST_NOW: String(now) }) }, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
  if (payload !== undefined) child.stdin.write(JSON.stringify(payload)); child.stdin.end()

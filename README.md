@@ -1,6 +1,6 @@
 # BuddyMac
 
-A native GPUix app combining BuddyFiles, BuddyTalk, BuddyWrite, NotchFlow, BuddyDock, and Liny. Jesty is excluded.
+A native GPUix app combining BuddyFiles, BuddyTalk, BuddyWrite, NotchFlow, and BuddyDock, plus a menu bar icon hider. Jesty and Liny are excluded.
 
 The interface follows [Francesco's design guidelines](https://oddofrancesco.com/design): black, white, coral, Chakra Petch and IBM Plex Mono. Navigation is immediate. Compact Files, Focus, and Talk views use the same GPUix window.
 
@@ -35,9 +35,9 @@ bun scripts/verify-package.ts
 bun scripts/app-size.ts
 ```
 
-The packaged UI and Liny agent share one Bun executable. Liny still runs in its own process using `BuddyMac --liny-worker`. The GPUix library has local symbols stripped before signing. `verify-package.ts` checks the packaged native loader, an isolated synthetic Liny reply and session persistence across restart with no external Bun on PATH. `app-size.ts` measures file contents without counting framework symlinks twice.
+The packaged UI is one Bun executable. The GPUix library has local symbols stripped before signing. `verify-package.ts` checks the packaged native loader with no external Bun on PATH and that no Liny artifacts ship. `app-size.ts` measures file contents without counting framework symlinks twice.
 
-`verify` drives the native UI using isolated fixture stores and records `evidence/buddymac-walkthrough.mp4`. It does not record microphone audio, make model requests, or alter installed app icons. `scripts/verify-live-liny.ts` is a separate opt-in provider test; it imports the inspected source profile and sends a synthetic prompt with tools disabled.
+`verify` drives the native UI using isolated fixture stores and records `evidence/buddymac-walkthrough.mp4`. It does not record microphone audio, make model requests, or alter installed app icons.
 
 ## First use
 
@@ -45,14 +45,14 @@ Talk cleanup, Write rewriting and voice editing default to `~openai/gpt-luna-lat
 
 Talk can record Fn as a shortcut. In macOS Keyboard settings, set "Press Globe key to" to "Do Nothing" and allow BuddyMac Accessibility access to use Fn outside the app.
 
-New installations start empty. BuddyMac does not automatically import settings, files, Dock packs, or local model weights from older utilities. Liny profile imports and sharing Focus with NotchFlow are explicit actions.
+New installations start empty. BuddyMac does not automatically import settings, files, Dock packs, or local model weights from older utilities. Sharing Focus with NotchFlow is an explicit action.
 
 - Talk and Write: open Talk → Settings → Set API key. BuddyMac uses its own Keychain item. Legacy keys stay with their original apps.
 - Recording and insertion: macOS grants microphone and Accessibility permissions separately. Enable shortcuts only after disabling overlapping shortcuts in the original apps.
 - Files: Settings selects a normal window or a left/right edge shelf.
 - Focus and Talk: Compact timer / Compact recorder opens a small floating view; Expand restores the full window.
 - Dock: select saved artwork to apply it. Keep selected icons applied enables periodic repair; Stop automatic reapplication disables it.
-- Liny: the active personal profile was copied to BuddyMac. Provider login, conversations, and new writes stay in the copied profile. Original data is unchanged.
+- Menu Bar: turn on Hide menu bar icons. An arrow and a thin divider appear left of the BuddyMac icon. Command-drag icons left of the divider, then click the arrow to hide or show them. Shown icons hide again after the chosen delay. No Accessibility or Screen Recording access is needed.
 - Start at login is opt-in. Closing the window keeps the menu-bar app running; Quit is in the menu-bar menu.
 
 Data lives under `~/Library/Application Support/BuddyMac`. Existing utilities and startup settings remain intact. [Workflow coverage](docs/parity.md) lists remaining feature and verification gaps. Public releases are Developer ID signed and notarized.

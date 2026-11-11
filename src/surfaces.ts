@@ -3,42 +3,35 @@ import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { chmod, mkdir, rename } from 'node:fs/promises'
 
-export interface StoredShortcut { keyCode: number; modifiers: number; label: string }
 export interface SurfaceSettings {
-  linySidebar: { enabled: boolean; edge: 'left' | 'right'; zone: 'top' | 'middle' | 'bottom' | 'entireEdge' }
-  linyShortcuts: { open: StoredShortcut | null; capture: StoredShortcut | null }
+  /** Icons left of BuddyMac's divider are hidden until the arrow is clicked. `autoHide` is seconds, 0 for never. */
+  menuBar: MenuBarSettings
   focusNotch: boolean
   focusMenuBar: boolean
   talkPill: boolean
 }
+export interface MenuBarSettings { enabled: boolean; autoHide: number; hideOnLaunch: boolean }
+export const autoHideChoices = [0, 5, 10, 15, 30, 60] as const
 export const defaultSurfaces: SurfaceSettings = {
-  linySidebar: { enabled: false, edge: 'right', zone: 'middle' },
-  linyShortcuts: { open: null, capture: null },
+  menuBar: { enabled: false, autoHide: 10, hideOnLaunch: true },
   focusNotch: true,
   focusMenuBar: true,
   talkPill: true,
 }
 const path = () => resolve(process.env.BUDDYMAC_DATA_DIR ?? resolve(homedir(), 'Library/Application Support/BuddyMac'), 'surfaces.json')
-let state: SurfaceSettings = defaultSurfaces
+let state: SurfaceSettings = defaultSurfaces, loaded = false
 const listeners = new Set<() => void>()
 const publish = (next: SurfaceSettings) => { state = next; for (const listener of listeners) listener() }
 
-function shortcut(value: unknown): StoredShortcut | null {
-  if (typeof value !== 'object' || value === null || !('keyCode' in value) || !('modifiers' in value) || !('label' in value)) return null
-  return typeof value.keyCode === 'number' && typeof value.modifiers === 'number' && typeof value.label === 'string' ? { keyCode: value.keyCode, modifiers: value.modifiers, label: value.label } : null
-}
 function parse(value: unknown): SurfaceSettings {
   const item = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {}
-  const sidebar = typeof item.linySidebar === 'object' && item.linySidebar !== null ? item.linySidebar as Record<string, unknown> : {}
-  const shortcuts = typeof item.linyShortcuts === 'object' && item.linyShortcuts !== null ? item.linyShortcuts as Record<string, unknown> : {}
-  const zones = ['top', 'middle', 'bottom', 'entireEdge'] as const
+  const bar = typeof item.menuBar === 'object' && item.menuBar !== null ? item.menuBar as Record<string, unknown> : {}
   return {
-    linySidebar: {
-      enabled: sidebar.enabled === true,
-      edge: sidebar.edge === 'left' ? 'left' : 'right',
-      zone: zones.find(zone => zone === sidebar.zone) ?? 'middle',
+    menuBar: {
+      enabled: bar.enabled === true,
+      autoHide: autoHideChoices.find(value => value === bar.autoHide) ?? defaultSurfaces.menuBar.autoHide,
+      hideOnLaunch: bar.hideOnLaunch !== false,
     },
-    linyShortcuts: { open: shortcut(shortcuts.open), capture: shortcut(shortcuts.capture) },
     focusNotch: item.focusNotch !== false,
     focusMenuBar: item.focusMenuBar !== false,
     talkPill: item.talkPill !== false,
@@ -47,7 +40,9 @@ function parse(value: unknown): SurfaceSettings {
 
 export const surfaces = {
   get: () => state,
-  async load() { const file = Bun.file(path()); publish(await file.exists() ? parse(await file.json()) : defaultSurfaces); return state },
+  /** True once the saved settings have been read, so launch-only behaviour does not act on the defaults. */
+  isLoaded: () => loaded,
+  async load() { const file = Bun.file(path()); const next = await file.exists() ? parse(await file.json()) : defaultSurfaces; loaded = true; publish(next); return state },
   async save(next: SurfaceSettings) {
     const destination = path()
     await mkdir(dirname(destination), { recursive: true, mode: 0o700 })
@@ -59,29 +54,3 @@ export const surfaces = {
 }
 export function useSurfaces() { return useSyncExternalStore(subscribe, () => state) }
 function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } }
-
-/** Reads the original Liny app's window mode and global shortcuts so takeover keeps the same habits. */
-export async function originalLinyPreferences(): Promise<Pick<SurfaceSettings, 'linySidebar' | 'linyShortcuts'> | null> {
-  const child = Bun.spawn(['/usr/bin/defaults', 'export', 'app.liny.desktop', '-'], { stdout: 'pipe', stderr: 'ignore' })
-  const [xml, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
-  if (code !== 0) return null
-  const read = (key: string) => xml.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`))?.[1]
-  const zones = ['top', 'middle', 'bottom', 'entireEdge'] as const
-  let open: StoredShortcut | null = null, capture: StoredShortcut | null = null
-  const data = xml.match(/<key>appShortcuts<\/key>\s*<data>([^<]*)<\/data>/)?.[1]
-  if (data) {
-    try {
-      const list: unknown = JSON.parse(Buffer.from(data.replace(/\s+/g, ''), 'base64').toString('utf8'))
-      if (Array.isArray(list)) for (let index = 0; index + 1 < list.length; index += 2) {
-        const entry = list[index + 1] as { key?: unknown; keyCode?: unknown; modifiers?: unknown }
-        const value = typeof entry?.keyCode === 'number' && typeof entry.modifiers === 'number' ? { keyCode: entry.keyCode, modifiers: entry.modifiers, label: typeof entry.key === 'string' ? entry.key.toUpperCase() : '' } : null
-        if (list[index] === 'open') open = value
-        if (list[index] === 'capture') capture = value
-      }
-    } catch {}
-  }
-  return {
-    linySidebar: { enabled: read('windowMode') === 'sidebar', edge: read('sidebarEdge') === 'left' ? 'left' : 'right', zone: zones.find(zone => zone === read('sidebarZone')) ?? 'middle' },
-    linyShortcuts: { open, capture },
-  }
-}

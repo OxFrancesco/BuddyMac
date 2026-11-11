@@ -6,7 +6,7 @@ export const tabs = {
   Write: ['Rewrite', 'Profiles', 'Notes', 'Settings'],
   Focus: ['Tasks', 'History', 'Check-ins', 'Settings'],
   Dock: ['Icons', 'New pack', 'Settings'],
-  Liny: ['Chat', 'History', 'Memory', 'Settings'],
+  'Menu Bar': ['Icons'],
   Camera: ['Capture', 'Recordings', 'Settings'],
   Settings: ['General', 'AI', 'Permissions', 'Shortcuts', 'Original apps'],
 } as const
@@ -18,7 +18,7 @@ export const isSection = (value: string): value is Section => value in tabs
 interface NavState { section: Section; tabs: { [S in Section]: Tab<S> }; paletteOpen: boolean }
 let state: NavState = {
   section: 'Files',
-  tabs: { Files: 'Shelf', Talk: 'Record', Write: 'Rewrite', Focus: 'Tasks', Dock: 'Icons', Liny: 'Chat', Camera: 'Capture', Settings: 'General' },
+  tabs: { Files: 'Shelf', Talk: 'Record', Write: 'Rewrite', Focus: 'Tasks', Dock: 'Icons', 'Menu Bar': 'Icons', Camera: 'Capture', Settings: 'General' },
   paletteOpen: false,
 }
 const listeners = new Set<() => void>()

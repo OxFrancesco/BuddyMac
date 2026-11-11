@@ -21,7 +21,7 @@ async function megabytes(processId: number) {
   return Number(match[1]) * (match[2] === 'G' ? 1024 : match[2] === 'K' ? 1 / 1024 : 1)
 }
 
-const app = await launchInstalled({ GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: data, BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny') }, bundle)
+const app = await launchInstalled({ GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: data, BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech') }, bundle)
 const samples: { cycle: number; helper: number; app: number }[] = []
 try {
   const appPid = await pid(join(bundle, 'Contents/MacOS/BuddyMac'))

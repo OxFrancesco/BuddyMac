@@ -6,7 +6,7 @@ const out=resolve(process.argv[2]??'/private/tmp/buddymac-views')
 const only=process.argv[3]
 await mkdir(out,{recursive:true})
 const root=await mkdtemp('/private/tmp/buddymac-views-data-')
-const env={...process.env,GPUIX_BACKGROUND:'1',LINY_MOCK:'1',BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_FOCUS_DISABLE_ALERTS:'1',BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LINY_HOME:join(root,'liny'),BUDDYMAC_LINY_SOURCE_HOME:join(root,'liny-source'),BUDDYMAC_LEGACY_FILES_DIR:join(root,'legacy'),BUDDYMAC_LEGACY_DOCK_MANIFEST:join(root,'pack.json')}
+const env={...process.env,GPUIX_BACKGROUND:'1',BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_FOCUS_DISABLE_ALERTS:'1',BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LEGACY_FILES_DIR:join(root,'legacy'),BUDDYMAC_LEGACY_DOCK_MANIFEST:join(root,'pack.json')}
 await mkdir(env.BUDDYMAC_LEGACY_FILES_DIR,{recursive:true})
 async function helper(path:string,args:string[],input?:unknown){const p=Bun.spawn([resolve(path),...args],{env,stdin:'pipe',stdout:'pipe',stderr:'pipe'});if(input!==undefined)p.stdin.write(JSON.stringify(input));p.stdin.end();const [text,error,code]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);assert.equal(code,0,error);return text}
 const files=['Quarterly plan.pdf','Project notes.txt','Screenshot 2026-09-28 at 18.42.png'].map(name=>join(root,name))
@@ -50,12 +50,8 @@ try{
  await app.getByTestId('nav-search').click();await app.getByTestId('palette-input').waitFor();await app.getByTestId('palette-input').fill('focus panel');await app.getByTestId('palette-item-0').click();await app.getByTestId('focus-panel').waitFor();await shot('notch-panel');await app.getByTestId('panel-expand').click();await Bun.sleep(500)
  await app.getByTestId('nav-Dock').click();await app.getByText('Fixture app').waitFor({timeoutMs:15000});await shot('dock-icons')
  await tab('dock','new-pack');await shot('dock-new-pack');await tab('dock','settings');await shot('dock-settings');await tab('dock','icons')
- await app.getByTestId('nav-Liny').click();await app.getByTestId('liny-input').waitFor();await shot('liny-chat-empty')
- await app.getByTestId('liny-input').fill('/');await shot('liny-slash');await app.getByTestId('liny-input').fill('Summarize my open tasks');await app.getByTestId('liny-send').click()
- for(let i=0;i<40&&!(await app.call('getPaintedText',{})).text.some((value:string)=>value.includes('[mock]'));i++)await Bun.sleep(250)
- await shot('liny-chat')
- for(const name of ['history','memory','settings']){await tab('liny',name);await shot(`liny-${name}`)}
- await tab('liny','chat')
+ await app.getByTestId('nav-Menu Bar').click();await app.getByTestId('menubar-enabled').waitFor();await shot('menubar-off')
+ await app.getByTestId('menubar-enabled').click();await app.getByTestId('menubar-toggle').waitFor();await shot('menubar-on')
  await app.getByTestId('nav-Settings').click();await Bun.sleep(500);await shot('settings-general')
  for(const name of ['ai','permissions','shortcuts','original-apps']){await tab('settings',name);await Bun.sleep(800);await shot(`settings-${name}`)}
  await app.getByTestId('nav-search').click();await app.getByTestId('palette-input').waitFor();await app.getByTestId('palette-input').fill('dict');await shot('palette')

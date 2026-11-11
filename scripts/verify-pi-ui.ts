@@ -16,7 +16,7 @@ const image = resolve('assets/ducky/frame-00.png')
 const inspector = join(native, 'buddymac-dock-inspector')
 await Bun.write(inspector, `#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify(${JSON.stringify([{ id: 'fixture', name: 'Fixture app', appPath: target, bundleIdentifier: 'org.buddytools.pi-fixture', iconPath: image }])}));\n`)
 await chmod(inspector, 0o700)
-const env = { ...process.env, GPUIX_BACKGROUND: '1', LINY_MOCK: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_NATIVE_DIR: native, BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LINY_HOME: join(root, 'liny'), BUDDYMAC_LINY_SOURCE_HOME: join(root, 'original'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json'), BUDDYMAC_INFERENCE_MOCK: '1', BUDDYMAC_INFERENCE_FIXTURE_IMAGE: image }
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_NATIVE_DIR: native, BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json'), BUDDYMAC_INFERENCE_MOCK: '1', BUDDYMAC_INFERENCE_FIXTURE_IMAGE: image }
 const settings = join(env.BUDDYMAC_DATA_DIR, 'Inference/settings.json')
 const executable = process.env.BUDDYMAC_VERIFY_APP
 const start = () => launch({ command: executable ?? process.execPath, args: executable ? [] : ['src/app.tsx'], env })
@@ -66,14 +66,6 @@ try {
   assert(await Bun.file(manifest.icons[0].styledIconPath).exists())
   checks.push('Dock generates a fixture preview and builds a real ICNS pack without applying it.')
 
-  await app.getByTestId('nav-Liny').click()
-  await app.getByTestId('liny-input').fill('Check the durable inference fixture.')
-  await app.getByTestId('liny-send').click()
-  let reply = false
-  for (let i = 0; i < 60; i++) { reply = (await app.call('getPaintedText', {})).text.some((text: string) => text.includes('[mock]')); if (reply) break; await Bun.sleep(150) }
-  assert(reply, 'Liny must complete a turn with the updated Pi runtime.')
-  await shot('liny-result')
-  checks.push('Liny completes a turn through Pi 1.0.2 with its existing provider fixture.')
 } catch (cause) { await shot('failure'); throw cause }
 finally {
   recording = false; await capture; await app.close()

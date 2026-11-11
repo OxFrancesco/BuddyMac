@@ -4,7 +4,7 @@ import {join,resolve} from 'node:path'
 import assert from 'node:assert/strict'
 const root=await mkdtemp('/private/tmp/buddymac-live-drag-')
 const bin='/Users/francescooddo/Applications/BuddyMac.app/Contents/MacOS'
-const env={...process.env,GPUIX_BACKGROUND:'1',BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LINY_HOME:join(root,'liny'),BUDDYMAC_LEGACY_FILES_DIR:join(root,'none'),BUDDYMAC_LEGACY_DOCK_MANIFEST:join(root,'none.json')}
+const env={...process.env,GPUIX_BACKGROUND:'1',BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LEGACY_FILES_DIR:join(root,'none'),BUDDYMAC_LEGACY_DOCK_MANIFEST:join(root,'none.json')}
 const fixture=join(root,'Physical drop verification.txt');await Bun.write(fixture,'Receiver must copy this exact synthetic content.')
 async function files(action:string,paths:string[]=[]){const p=Bun.spawn([join(bin,'buddymac-files')],{env,stdin:'pipe',stdout:'pipe',stderr:'pipe'});p.stdin.write(JSON.stringify({action,paths}));p.stdin.end();const out=await new Response(p.stdout).json();assert.equal(await p.exited,0);return out}
 await files('add',[fixture])

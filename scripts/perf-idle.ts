@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 // `BUDDYMAC_IDLE_FRAME_MS=8 bun scripts/perf-idle.ts` measures the old fixed GPUix pacing for comparison.
 const root = await mkdtemp('/private/tmp/buddymac-idle-')
 const env = { ...process.env, BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'),
-  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'),
+  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
   BUDDYMAC_LEGACY_FILES_DIR: join(root, 'no-legacy'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'no-pack.json') }
 const packaged = process.env.BUDDYMAC_VERIFY_APP
 const app = await launch({ command: packaged ?? process.execPath, args: packaged ? [] : [resolve('src/app.tsx')], env })

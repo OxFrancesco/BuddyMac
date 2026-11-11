@@ -4,10 +4,10 @@ import { chooseFiles, pasteFiles } from './files'
 import { focus } from './focus'
 import { focusService } from './focus-state'
 import { speech } from './speech-state'
-import { liny } from './liny'
 import { refreshDock } from './dock'
 import { requestCompact } from './panel'
 import { toggleCameraPreview, toggleCameraRecording } from './camera'
+import { toggleMenuBarIcons } from './menubar'
 import { C, Empty, Field, Text, space } from './ui'
 
 interface Command { label: string; detail: string; keywords: string; run: () => unknown }
@@ -20,12 +20,11 @@ const keywords: Record<string, string> = {
   'Write Settings': 'model output replace clipboard', 'Focus Tasks': 'todo pomodoro timer task project priority', 'Focus History': 'activity streak stats sessions graph',
   'Focus Check-ins': 'mood gratitude daily', 'Focus Settings': 'durations break notifications sound notch menu bar notchflow import',
   'Dock Icons': 'icon pack apply restore reopen', 'Dock New pack': 'artwork images create icns', 'Dock Settings': 'app management refresh keep applied',
-  'Liny Chat': 'assistant ask ai message screen capture', 'Liny History': 'conversations sessions', 'Liny Memory': 'remember facts notes',
-  'Liny Settings': 'provider codex openrouter model reasoning sidebar shortcut import',
+  'Menu Bar Icons': 'hide hidden status items icons ice bartender clutter divider separator collapse expand',
   'Camera Capture': 'webcam usb video record preview mirror resolution fps frame rate', 'Camera Recordings': 'videos movies files play trash',
   'Camera Settings': 'hevc h264 codec folder permission access',
   'Settings General': 'login start search account', 'Settings Permissions': 'camera microphone accessibility screen recording notifications automation app management',
-  'Settings Shortcuts': 'hotkeys keyboard', 'Settings Original apps': 'buddytalk buddywrite notchflow buddyfiles buddydock liny import takeover login items',
+  'Settings Shortcuts': 'hotkeys keyboard', 'Settings Original apps': 'buddytalk buddywrite notchflow buddyfiles buddydock import takeover login items',
 }
 const commands: Command[] = [
   ...sections.flatMap(section => (tabs[section] as readonly string[]).map(tab => ({
@@ -39,7 +38,7 @@ const commands: Command[] = [
   { label: 'Start or pause the timer', detail: 'Focus', keywords: 'pomodoro', run: () => { const running = focusService.getSnapshot().data?.isRunning; void focusService.run(() => focus.timer(running ? 'pause' : 'start')).catch(() => {}) } },
   { label: 'Open the compact timer', detail: 'Focus', keywords: 'small floating', run: () => requestCompact('focus') },
   { label: 'Open the Focus panel', detail: 'Focus', keywords: 'notch notchflow panel tasks timer ducks', run: () => requestCompact('notch') },
-  { label: 'New Liny chat', detail: 'Liny', keywords: 'conversation reset', run: () => { nav.go('Liny', 'Chat'); void liny.reset() } },
+  { label: 'Show or hide menu bar icons', detail: 'Menu Bar', keywords: 'hidden status items collapse expand ice bartender', run: () => toggleMenuBarIcons() },
   { label: 'Show or hide the camera preview', detail: 'Camera', keywords: 'webcam bubble floating face overlay', run: () => void toggleCameraPreview() },
   { label: 'Start or stop a camera recording', detail: 'Camera', keywords: 'webcam video record', run: () => void toggleCameraRecording() },
   { label: 'Refresh the Dock', detail: 'Dock', keywords: 'restart icons', run: () => void refreshDock() },

@@ -12,7 +12,7 @@ await mkdir(out, { recursive: true })
 const profile = join(root, 'profile.json')
 const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_PROFILE: profile,
   BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'),
-  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'),
+  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
   BUDDYMAC_LEGACY_FILES_DIR: join(root, 'no-legacy'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'no-pack.json') }
 async function focus(command: string, now: number, input = '') {
   const child = Bun.spawn([resolve('dist/buddymac-focus'), command], { env: { ...env, BUDDYMAC_FOCUS_TEST_NOW: String(now) }, stdin: 'pipe', stdout: 'ignore', stderr: 'inherit' })

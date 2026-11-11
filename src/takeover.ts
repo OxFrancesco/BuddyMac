@@ -10,7 +10,7 @@ import { loadEdgeSettings, saveEdgeSettings } from './edge'
 import { getManaged, loadCurrentPack, setManaged } from './dock'
 import { setLogin } from './platform'
 import { stopOriginals } from './originals'
-import { originalLinyPreferences, surfaces } from './surfaces'
+import { surfaces } from './surfaces'
 
 const owned = (path: string) => { try { return statSync(path).uid === process.getuid?.() } catch { return false } }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
@@ -27,10 +27,7 @@ export async function makeBuddyMacMain(): Promise<string[]> {
     const current = await loadEdgeSettings()
     await saveEdgeSettings({ ...current, side: original.dock === 'left' ? 'left' : 'right', pinned: original.keepOpen ?? false, autoShow: original.autoShow ?? true, holdDelay: Math.min(3, Math.max(0.2, original.holdDelay ?? current.holdDelay)), onlyFiles: original.onlyFiles ?? true })
   })
-  await attempt('Liny', async () => {
-    const liny = await originalLinyPreferences()
-    await surfaces.update(current => ({ ...current, focusNotch: true, focusMenuBar: true, talkPill: true, ...liny ? { linySidebar: liny.linySidebar, linyShortcuts: { open: liny.linyShortcuts.open ?? current.linyShortcuts.open, capture: liny.linyShortcuts.capture ?? current.linyShortcuts.capture } } : {} }))
-  })
+  await attempt('Surfaces', () => surfaces.update(current => ({ ...current, focusNotch: true, focusMenuBar: true, talkPill: true })))
   await attempt('Shortcuts', () => setSpeechShortcuts(true))
   await attempt('Start at login', async () => { setLogin(true) })
   await attempt('Dock', async () => {

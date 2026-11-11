@@ -35,7 +35,7 @@ async function probe(path: string) {
   return JSON.parse(out) as { streams: { codec_type: string; codec_name: string; width?: number; height?: number; avg_frame_rate: string }[]; format: { duration: string } }
 }
 
-const app = await launchInstalled({ GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: data, BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny') }, bundle)
+const app = await launchInstalled({ GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: data, BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech') }, bundle)
 const steps: string[] = [], metrics: Record<string, unknown> = {}
 let recording = true
 const captured: { path: string; time: number }[] = []

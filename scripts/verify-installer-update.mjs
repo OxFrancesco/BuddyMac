@@ -14,7 +14,7 @@ const cli = resolve('packages/buddymac/cli.mjs');
 const release = JSON.parse(await readFile(resolve('packages/buddymac/release.json')));
 const out = resolve('evidence/installer-update');
 await mkdir(destination); await mkdir(out, { recursive: true });
-const env = { ...process.env, GPUIX_BACKGROUND: '1', LINY_MOCK: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LINY_HOME: join(root, 'liny') };
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus') };
 function run(command, args) {
   const p = spawnSync(command, args, { encoding: 'utf8', env });
   assert.equal(p.status, 0, p.stderr); return p.stdout.trim();

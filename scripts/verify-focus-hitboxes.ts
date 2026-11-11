@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 const root = await mkdtemp('/private/tmp/buddymac-checkboxes-')
 const out = resolve('evidence/pi/focus')
 await mkdir(out, { recursive: true })
-const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_FOCUS_DISABLE_ALERTS: '1', BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'), BUDDYMAC_LINY_SOURCE_HOME: join(root, 'original'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json') }
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_FOCUS_DISABLE_ALERTS: '1', BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json') }
 async function call(command: string, input?: unknown) {
   const child = Bun.spawn([resolve('dist/buddymac-focus'), command], { env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
   if (input !== undefined) child.stdin.write(JSON.stringify(input))

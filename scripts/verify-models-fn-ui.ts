@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 import { SpeechClient } from '../src/speech'
 
 const root = await mkdtemp('/private/tmp/buddymac-models-fn-ui-')
-const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LINY_HOME: join(root, 'liny') }
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_FOCUS_HOME: join(root, 'focus') }
 const client = new SpeechClient({ dataDirectory: env.BUDDYMAC_SPEECH_DATA_DIR })
 try {
  const prefs = await client.preferences()

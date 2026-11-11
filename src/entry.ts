@@ -3,9 +3,7 @@ import { dirname, join } from "node:path";
 
 const executableDirectory = dirname(process.execPath);
 const packaged = executableDirectory.endsWith(".app/Contents/MacOS");
-if (process.argv.includes("--liny-worker")) {
-  await import("../native/liny/worker");
-} else if (packaged) {
+if (packaged) {
   const resources = join(executableDirectory, "../Resources");
   process.env.NAPI_RS_NATIVE_LIBRARY_PATH = join(executableDirectory, "gpuix-native.node");
   process.env.BUDDYMAC_NATIVE_DIR ??= executableDirectory;
@@ -23,9 +21,9 @@ if (process.argv.includes("--liny-worker")) {
     } finally { client.dispose(); }
     process.exit(0);
   } else if (process.argv.includes("--check-runtime")) {
-    const paths = ["gpuix-native.node", "libbuddymac.dylib", "libbuddymac-edge.dylib", "libbuddymac-panel.dylib", "buddymac-files", "buddymac-dock-applier", "buddymac-dock-inspector", "buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-speech", "buddymac-camera", "buddymac-default-browser"];
+    const paths = ["gpuix-native.node", "libbuddymac.dylib", "libbuddymac-edge.dylib", "libbuddymac-panel.dylib", "buddymac-files", "buddymac-dock-applier", "buddymac-dock-inspector", "buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-speech", "buddymac-camera"];
     for (const path of paths) if (!existsSync(join(executableDirectory, path))) throw new Error(`Missing bundled runtime: ${path}`);
-    for (const path of ["fonts/ChakraPetch-Bold.ttf", "fonts/IBMPlexMono-Regular.ttf", "ducky/frame-00.png", "Open Computer Use.app/Contents/MacOS/OpenComputerUse"]) {
+    for (const path of ["fonts/ChakraPetch-Bold.ttf", "fonts/IBMPlexMono-Regular.ttf", "ducky/frame-00.png"]) {
       if (!existsSync(join(resources, path))) throw new Error(`Missing bundled resource: ${path}`);
     }
     const native = await import("@gpuix/native");

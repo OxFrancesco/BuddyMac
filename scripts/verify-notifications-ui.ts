@@ -4,7 +4,7 @@ import {join,resolve} from 'node:path'
 const previousPermissions=await Bun.file('evidence/live/permissions.json').json()
 const previousIDs=new Set(previousPermissions.notifications.deliveredIdentifiers)
 const root=await mkdtemp('/private/tmp/buddymac-notification-ui-')
-const app=await launchInstalled({GPUIX_BACKGROUND:'1',BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LINY_HOME:join(root,'liny')})
+const app=await launchInstalled({GPUIX_BACKGROUND:'1',BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech')})
 try{
  await app.getByTestId('nav-Focus').click();await Bun.sleep(700);await app.getByTestId('focus-settings').click();await Bun.sleep(700);await app.getByTestId('focus-settings-save').click()
  console.log('Notification permission requested from BuddyMac main process.')

@@ -12,7 +12,7 @@ await Bun.write(join(target, 'Contents/Info.plist'), '<plist version="1.0"><dict
 const icon = '/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns'
 const manifest = join(root, 'pack.json')
 await Bun.write(manifest, JSON.stringify({ version: 1, theme: 'Permission recovery', icons: [{ id: 'fixture', name: 'Fixture', appPath: target, bundleIdentifier: null, iconPath: icon, styledIconPath: icon }] }))
-const env = { ...process.env, GPUIX_BACKGROUND: '1', LINY_MOCK: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_FOCUS_DIRECT: '1', BUDDYMAC_FOCUS_DISABLE_ALERTS: '1', BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'), BUDDYMAC_LINY_SOURCE_HOME: join(root, 'liny-source'), BUDDYMAC_LEGACY_FILES_DIR: join(root, 'legacy'), BUDDYMAC_LEGACY_DOCK_MANIFEST: manifest, BUDDYMAC_DOCK_NO_REFRESH: '1' }
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_FOCUS_DIRECT: '1', BUDDYMAC_FOCUS_DISABLE_ALERTS: '1', BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LEGACY_FILES_DIR: join(root, 'legacy'), BUDDYMAC_LEGACY_DOCK_MANIFEST: manifest, BUDDYMAC_DOCK_NO_REFRESH: '1' }
 const packaged = process.env.BUDDYMAC_VERIFY_APP
 const app = await launch({ command: packaged ?? process.execPath, args: packaged ? [] : ['src/app.tsx'], env })
 const frames = await mkdtemp('/private/tmp/buddymac-recovery-frames-')

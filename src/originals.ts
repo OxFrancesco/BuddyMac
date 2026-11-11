@@ -4,7 +4,7 @@ import { chmod, mkdir, rename, rm } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 
 export interface OriginalApp {
-  id: 'files' | 'talk' | 'write' | 'focus' | 'dock' | 'liny'
+  id: 'files' | 'talk' | 'write' | 'focus' | 'dock'
   name: string
   section: string
   bundleId?: string
@@ -23,7 +23,6 @@ export const originalApps: OriginalApp[] = [
   { id: 'write', name: 'BuddyWrite', section: 'Write', bundleId: 'com.francescooddo.BuddyGrammar', paths: ['/Applications/BuddyWrite.app', resolve(home, 'Applications/BuddyWrite.app')], loginItem: 'BuddyGrammar' },
   { id: 'focus', name: 'NotchFlow', section: 'Focus', bundleId: 'com.avg-francesco.NotchFlow', paths: [resolve(home, 'Applications/NotchFlow.app'), '/Applications/NotchFlow.app'] },
   { id: 'dock', name: 'BuddyDock', section: 'Dock', paths: [], launchAgent: 'ai.buddydock.persist' },
-  { id: 'liny', name: 'Liny', section: 'Liny', bundleId: 'app.liny.desktop', paths: ['/Applications/Liny.app', resolve(home, 'Applications/Liny.app')], launchAgent: 'app.liny.daemon' },
 ]
 const dataRoot = () => resolve(process.env.BUDDYMAC_DATA_DIR ?? resolve(home, 'Library/Application Support/BuddyMac'), 'Takeover')
 const recordPath = () => resolve(dataRoot(), 'state.json')

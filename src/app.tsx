@@ -3,10 +3,8 @@ import { appendFileSync } from 'node:fs'
 import { createRenderer, render, useGpuix, useWindowSize } from '@gpuix/react'
 import type { EventPayload } from '@gpuix/native'
 import { CompactView } from './compact-view'
-import { getPanelMode, hidePanel, presentPanel, requestCompact, restorePanel, setPanelMode, setFilesEdge, setSidebarEdge, subscribeCompact, type PanelMode } from './panel'
+import { getPanelMode, hidePanel, presentPanel, requestCompact, restorePanel, setPanelMode, setFilesEdge, subscribeCompact, type PanelMode } from './panel'
 import { FilesView } from './files-view'
-import { LinySidebar, LinyView, captureScreen, type Image } from './liny-view'
-import { liny } from './liny'
 import { TalkView } from './talk-view'
 import { WriteView } from './write-view'
 import { DockView } from './dock-view'
@@ -18,7 +16,7 @@ import { focusService, startFocusService, stopFocusService } from './focus-state
 import { focus } from './focus'
 import { FocusPanel, clock, notchPin, phaseTitle } from './notchflow'
 import { C, display, space, Text, ErrorText, Button } from './ui'
-import { hideWindow, showWindow, windowKey, initializePlatform, installMenu, keepRunning, nextPlatformAction, pointerState, registerHotkeys, setStatusTitle, windowVisible, type PointerState } from './platform'
+import { hideWindow, showWindow, windowKey, initializePlatform, installMenu, keepRunning, nextPlatformAction, pointerState, setStatusTitle, windowVisible, type PointerState } from './platform'
 import { removeFiles } from './files'
 import { dockFailureMessage, reapplyManaged, refreshDock } from './dock'
 import { DockRecovery, needsAppManagement } from './dock-recovery'
@@ -30,41 +28,27 @@ import { takeoverFromLaunch } from './takeover'
 import { handleRecorderAction } from './recorder'
 import { CameraView } from './camera-view'
 import { closeCamera, toggleCameraPreview } from './camera'
-import { surfaces, useSurfaces, type SurfaceSettings } from './surfaces'
+import { surfaces, useSurfaces } from './surfaces'
+import { MenuBarView } from './menubar-view'
+import { applyMenuBar, misplacedMessage } from './menubar'
 initializePlatform()
 
-type Surface = 'main' | 'hidden' | 'files' | 'focus' | 'talk' | 'liny' | 'notch'
+type Surface = 'main' | 'hidden' | 'files' | 'focus' | 'talk' | 'notch'
 const mainSections = sections.filter(section => section !== 'Settings')
-function Panel({ section, pending, onPendingUsed, shown }: { section: Section; pending: Image | null; onPendingUsed: () => void; shown: boolean }) {
+function Panel({ section, shown }: { section: Section; shown: boolean }) {
   switch (section) {
     case 'Files': return <FilesView />
     case 'Focus': return <FocusView visible={shown} />
     case 'Talk': return <TalkView />
     case 'Write': return <WriteView />
     case 'Dock': return <DockView />
-    case 'Liny': return <LinyView pending={pending} onPendingUsed={onPendingUsed} />
+    case 'Menu Bar': return <MenuBarView />
     case 'Camera': return <CameraView />
     case 'Settings': return <SettingsView />
   }
 }
 
 function inRect(point: { x: number; y: number }, rect: { x: number; y: number; width: number; height: number }) { return point.x >= rect.x && point.x < rect.x + rect.width && point.y >= rect.y && point.y < rect.y + rect.height }
-function linyZone(pointer: PointerState, layout: SurfaceSettings['linySidebar']) {
-  return pointer.screens.some(screen => {
-    if (pointer.y < screen.y || pointer.y >= screen.y + screen.height) return false
-    const edgeX = layout.edge === 'left' ? screen.x : screen.x + screen.width
-    if (Math.abs(pointer.x - edgeX) > 28 || pointer.x < screen.x || pointer.x >= screen.x + screen.width) return false
-    const fraction = (pointer.y - screen.y) / screen.height
-    return layout.zone === 'entireEdge' || (layout.zone === 'bottom' ? fraction < 1 / 3 : layout.zone === 'middle' ? fraction >= 1 / 3 && fraction < 2 / 3 : fraction >= 2 / 3)
-  })
-}
-function linyCloseArea(pointer: PointerState, edge: 'left' | 'right') {
-  const window = pointer.window
-  if (!window.visible || window.x === undefined || window.width === undefined) return false
-  const screen = pointer.screens.find(item => inRect(pointer, item))
-  if (!screen) return false
-  return edge === 'right' ? pointer.x < window.x : pointer.x >= window.x + window.width
-}
 // NotchFlow's hotspot: a band under the menu bar centre, 18% of the display wide (190 to 300 points).
 function notchZone(pointer: PointerState) {
   return pointer.screens.some(screen => {
@@ -85,7 +69,6 @@ function App() {
   const layout = useSurfaces()
   const [surface, setSurface] = useState<Surface>(process.env.GPUIX_BACKGROUND === '1' ? 'main' : 'hidden')
   const [error, setError] = useState('')
-  const [pending, setPending] = useState<Image | null>(null)
   const { renderer } = useGpuix()
   const surfaceRef = useRef<Surface>(surface), layoutRef = useRef(layout)
   surfaceRef.current = surface; layoutRef.current = layout
@@ -98,18 +81,16 @@ function App() {
     const current = surfaceRef.current
     if (current === next) return
     traceSurface(`${current} -> ${next}`)
-    // The notch panel and the Liny sidebar borrow the one window. Remember what to give it back to.
-    if (next === 'notch' || next === 'liny' || next === 'files') {
+    // The notch panel and the Files shelf borrow the one window. Remember what to give it back to.
+    if (next === 'notch' || next === 'files') {
       if (current === 'main' || current === 'hidden') { floatingReturn = current; floatingFront = current === 'main' && windowKey() }
     }
     try {
-      const floating: PanelMode | null = next === 'focus' || next === 'talk' || next === 'liny' || next === 'notch' || next === 'files' ? next : null
+      const floating: PanelMode | null = next === 'focus' || next === 'talk' || next === 'notch' || next === 'files' ? next : null
       if (next !== 'files') setEdgeFilesActive(false)
       if (floating) {
-        if (floating === 'liny') setSidebarEdge(layoutRef.current.linySidebar.edge)
         if (floating === 'files') setFilesEdge(getFilesEdge())
         setPanelMode(floating)
-        if (floating === 'liny') renderer?.activateWindow?.()
       } else if (next === 'main') {
         if (getPanelMode() !== 'normal') setPanelMode('normal')
         renderer?.activateWindow?.()
@@ -139,27 +120,13 @@ function App() {
     return () => clearTimeout(timer)
   }, [surface, size.width, size.height])
 
-  async function captureForLiny() {
-    try {
-      const shot = await captureScreen(true)
-      if (!shot) return
-      setPending(shot)
-      if (layoutRef.current.linySidebar.enabled && surfaceRef.current !== 'main') change('liny'); else openMain('Liny')
-    } catch (cause) { report(cause) }
-  }
-
   useEffect(() => subscribeCompact(mode => {
     if (mode === 'normal') change('main')
     else change(mode)
   }), [renderer])
 
-  useEffect(() => {
-    const failed = registerHotkeys([
-      ...layout.linyShortcuts.open ? [{ id: 'liny-open', keyCode: layout.linyShortcuts.open.keyCode, modifiers: layout.linyShortcuts.open.modifiers }] : [],
-      ...layout.linyShortcuts.capture ? [{ id: 'liny-capture', keyCode: layout.linyShortcuts.capture.keyCode, modifiers: layout.linyShortcuts.capture.modifiers }] : [],
-    ])
-    if (failed.length) setError(`Another app already uses the ${failed.map(id => id === 'liny-open' ? 'Open Liny' : 'Capture region').join(' and ')} shortcut. Change it in Liny settings.`)
-  }, [layout.linyShortcuts])
+  // Hides or shows the menu bar icons left of BuddyMac's divider, and keeps the divider in step with Settings.
+  useEffect(() => { if (process.env.GPUIX_BACKGROUND !== '1') try { applyMenuBar(layout.menuBar, surfaces.isLoaded()) } catch (cause) { report(cause) } }, [layout.menuBar])
 
 
   useEffect(() => {
@@ -169,7 +136,7 @@ function App() {
       if (cmd && event.key === 'k') { nav.palette(!nav.get().paletteOpen); return }
       if (cmd && event.key === ',' && surfaceRef.current === 'main') { nav.go('Settings'); return }
       if (cmd && event.key && /^[1-8]$/.test(event.key)) { const target = sections[Number(event.key) - 1]; if (target && surfaceRef.current === 'main') nav.go(target); return }
-      if (event.key === 'escape' && !event.modifiers?.cmd && (surfaceRef.current === 'liny' || (surfaceRef.current === 'notch' && !notchPin.pinned))) dismissFloating()
+      if (event.key === 'escape' && !event.modifiers?.cmd && surfaceRef.current === 'notch' && !notchPin.pinned) dismissFloating()
     }
     return onWindowKey(listener)
   }, [renderer])
@@ -182,7 +149,7 @@ function App() {
     else if (process.env.BUDDYMAC_VERIFY_SURFACES === '1') keepRunning()
     void loadEdgeSettings().then(settings => { setEdgeFilesActive(true); configureEdge(settings) }).catch(report)
     if (process.argv.includes('--takeover')) void takeoverFromLaunch().then(async problems => { if (problems.length) report(problems.join(' ')); await loadEdgeSettings().then(configureEdge); await surfaces.load() }).catch(report)
-    let linySince = 0, linyArmed = true, closeSince = 0, notchSince = 0, leaveSince = 0
+    let notchSince = 0, leaveSince = 0
     if (process.env.GPUIX_BACKGROUND !== '1') try { speech() } catch (cause) { report(cause) }
     const timer = setInterval(() => {
       const action = nextPlatformAction()
@@ -191,18 +158,14 @@ function App() {
       else if (action === 'focus-skip') void focusService.run(() => focus.timer('skip')).catch(report)
       else if (action === 'focus-panel') { notchArmed = false; change('notch') }
       else if (action === 'camera-preview') void toggleCameraPreview()
-      else if (action === 'quit') { stopFocusService(); closeSpeech(); closeCamera(); liny.close(); process.exit(0) }
+      else if (action === 'quit') { stopFocusService(); closeSpeech(); closeCamera(); process.exit(0) }
       else if (action.startsWith('{')) {
         try {
           const value: unknown = JSON.parse(action)
           if (value && typeof value === 'object') {
             const record = value as Record<string, unknown>
             if (handleRecorderAction(record)) {}
-            else if (record.action === 'hotkey' && record.id === 'liny-open') {
-              if (surfaceRef.current === 'liny') dismissFloating()
-              else if (layoutRef.current.linySidebar.enabled) { linyArmed = false; change('liny') }
-              else openMain('Liny')
-            } else if (record.action === 'hotkey' && record.id === 'liny-capture') void captureForLiny()
+            else if (record.action === 'menubar-misplaced') setError(misplacedMessage)
             else if (record.action === 'files-drag-completed' && Array.isArray(record.paths) && record.paths.every((path: unknown) => typeof path === 'string')) void removeFiles(record.paths as string[]).catch(report)
           }
         } catch (cause) { report(cause) }
@@ -216,18 +179,11 @@ function App() {
       if (current === 'files' && edge.requested) { try { setFilesEdge(getFilesEdge()); setPanelMode('files'); presentPanel(); edgePresented() } catch (cause) { report(cause); dismissEdgeShelf() } return }
       if ((current === 'hidden' || current === 'main') && edge.requested) { change('files'); if (surfaceRef.current !== 'files') dismissEdgeShelf(); return }
       if (current === 'hidden' && visible && !edge.active) { traceSurface('hidden -> main (window reappeared)'); surfaceRef.current = 'main'; setSurface('main'); return }
-      const watchMain = current === 'main' && (settings.focusNotch || settings.linySidebar.enabled)
-      const watchHidden = current === 'hidden' && (settings.focusNotch || settings.linySidebar.enabled)
-      const pointer = watchHidden || current === 'liny' || current === 'notch' || watchMain ? pointerState() : null
+      const watchEdges = (current === 'main' || current === 'hidden') && settings.focusNotch
+      const pointer = watchEdges || current === 'notch' ? pointerState() : null
       // With the window open, the edges still work as long as the pointer is not over BuddyMac itself.
       if (pointer && (current === 'hidden' || current === 'main') && !pointer.down) {
-        if (settings.linySidebar.enabled && outsideWindow(pointer, 0) && linyZone(pointer, settings.linySidebar)) { if (!linySince) linySince = now; else if (linyArmed && now - linySince >= 350) { linySince = 0; linyArmed = false; closeSince = 0; change('liny') } }
-        else { linySince = 0; linyArmed = true }
         if (settings.focusNotch && notchZone(pointer)) { if (!notchSince) notchSince = now; else if (now - notchSince >= 120) { notchSince = 0; leaveSince = 0; notchArmed = true; change('notch') } } else notchSince = 0
-      }
-      if (pointer && current === 'liny') {
-        if (!linyArmed && !linyCloseArea(pointer, settings.linySidebar.edge)) linyArmed = true
-        if (linyArmed && linyCloseArea(pointer, settings.linySidebar.edge)) { if (!closeSince) closeSince = now; else if (now - closeSince >= 350) { closeSince = 0; linyArmed = false; dismissFloating() } } else closeSince = 0
       }
       if (pointer && current === 'notch') {
         const outside = outsideWindow(pointer, 8) && !notchZone(pointer)
@@ -247,16 +203,15 @@ function App() {
 
   useEffect(() => { setFramePace(surface === 'hidden' ? 'idle' : 'active') }, [surface])
 
-  const floating = surface === 'focus' || surface === 'talk' || surface === 'liny' || surface === 'files' || surface === 'notch'
-  // Nothing of the main window stays mounted while it is hidden: Focus, Liny and Talk would keep re-rendering unseen.
+  const floating = surface === 'focus' || surface === 'talk' || surface === 'files' || surface === 'notch'
+  // Nothing of the main window stays mounted while it is hidden: Focus and Talk would keep re-rendering unseen.
   const main = surface === 'main'
   return <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row', backgroundColor: C.bg }}>
     <MenuBarTimer />
     {main ? <Sidebar section={section} /> : null}
     <div style={{ position: 'relative', flexGrow: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}>
-      {main ? <div key={section} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><Panel section={section} shown pending={section === 'Liny' ? pending : null} onPendingUsed={() => setPending(null)} /></div> : null}
+      {main ? <div key={section} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><Panel section={section} shown /></div> : null}
       {surface === 'focus' || surface === 'talk' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><CompactView mode={surface} onExpand={() => requestCompact('normal')} /></div> : null}
-      {surface === 'liny' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><LinySidebar onExpand={() => { nav.go('Liny'); requestCompact('normal') }} pending={pending} onPendingUsed={() => setPending(null)} /></div> : null}
       {surface === 'notch' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><FocusPanel width={size.width} onExpand={() => openMain('Focus')} onSettings={() => { nav.go('Focus', 'Settings'); change('main') }} /></div> : null}
       {surface === 'files' ? <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}><FilesView shelf /></div> : null}
       {paletteOpen && main ? <Palette /> : null}

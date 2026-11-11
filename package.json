@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun --hot src/app.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "bun test ./src ./native/files/files.test.ts ./native/dock/dock.test.ts ./native/liny/regression.test.ts ./native/liny/transport.test.ts ./native/focus/notifications",
+    "test": "bun test ./src ./native/files/files.test.ts ./native/dock/dock.test.ts ./native/focus/notifications",
     "build": "bun scripts/build.ts",
     "verify": "bun scripts/verify-ui.ts"
   },

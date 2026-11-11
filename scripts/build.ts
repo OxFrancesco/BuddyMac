@@ -29,7 +29,6 @@ if (!identity) throw new Error(`Code signing identity unavailable: ${identityNam
 for (const script of ["build-platform.sh", "build-edge.sh", "build-panel.sh", "build-files.sh", "build-dock.sh", "build-focus.sh", "build-focus-app.sh", "build-speech.sh", "build-camera.sh"]) {
   await run(["/bin/zsh", join(root, "scripts", script)]);
 }
-await run([process.execPath, "native/liny/build.ts"]);
 await mkdir(dist, { recursive: true });
 await rm(stage, { recursive: true, force: true });
 await mkdir(macos, { recursive: true });
@@ -49,7 +48,7 @@ for (const file of await readdir(join(dist, "native"))) {
   const source = join(dist, "native", file);
   if ((await stat(source)).isFile()) await copyFile(source, join(macos, file));
 }
-for (const file of ["buddymac-focus", "libbuddymac-notifications.dylib", "buddymac-default-browser"]) await copyFile(join(dist, file), join(macos, file));
+for (const file of ["buddymac-focus", "libbuddymac-notifications.dylib"]) await copyFile(join(dist, file), join(macos, file));
 await copyFile(join(root, "native/speech/build/buddymac-speech"), join(macos, "buddymac-speech"));
 const focusApp = join(dist, "BuddyMac Focus.app");
 const packagedFocusApp = join(stage, "Contents/Helpers/BuddyMac Focus.app");
@@ -62,17 +61,11 @@ await run(["/usr/bin/strip", "-x", join(macos, "gpuix-native.node")]);
 await cp(join(root, "assets/fonts"), join(resources, "fonts"), { recursive: true });
 await cp(join(root, "assets/ducky"), join(resources, "ducky"), { recursive: true });
 await run(["/usr/bin/ditto", join(root, "native/speech/build/Frameworks/llama.framework"), framework]);
-const sourceOCU = join(root, "native/liny/ocu/Open Computer Use.app");
-const packagedOCU = join(resources, "Open Computer Use.app");
-await run(["/usr/bin/codesign", "--verify", "--strict", sourceOCU]);
-await run(["/usr/bin/ditto", sourceOCU, packagedOCU]);
-await run(["/usr/bin/codesign", "--verify", "--strict", packagedOCU]);
 await mkdir(join(resources, "Licenses"), { recursive: true });
 await copyFile(join(root, "node_modules/@gpuix/native/LICENSE"), join(resources, "Licenses/GPUix-LICENSE"));
 await copyFile(join(root, "node_modules/react/LICENSE"), join(resources, "Licenses/React-LICENSE"));
 await copyFile(join(root, "native/speech/ThirdParty/llama-LICENSE"), join(resources, "Licenses/llama-LICENSE"));
 for (const file of ["SOURCE.md"]) await copyFile(join(root, "native/speech", file), join(resources, "Licenses/Speech-SOURCE.md"));
-await copyFile(join(root, "native/liny/README.md"), join(resources, "Licenses/Liny-SOURCE.md"));
 
 const icon = join(root, "assets/AppIcon.icns");
 if (existsSync(icon)) await copyFile(icon, join(resources, "AppIcon.icns"));
@@ -94,7 +87,7 @@ await writeFile(join(stage, "Contents/Info.plist"), `<?xml version="1.0" encodin
 <key>NSMicrophoneUsageDescription</key><string>BuddyMac records your voice when you start dictation, and sound for camera recordings.</string>
 <key>NSCameraUsageDescription</key><string>BuddyMac shows and records the camera you choose in Camera.</string>
 <key>NSSpeechRecognitionUsageDescription</key><string>BuddyMac transcribes speech when you start dictation.</string>
-<key>NSAppleEventsUsageDescription</key><string>BuddyMac controls applications when you request a desktop action.</string>
+<key>NSAppleEventsUsageDescription</key><string>BuddyMac asks System Events and Finder to manage login items and app icons when you request it.</string>
 ${existsSync(icon) ? "<key>CFBundleIconFile</key><string>AppIcon</string>" : ""}
 </dict></plist>
 `);
@@ -109,10 +102,8 @@ for (const file of await readdir(macos)) {
   const permissions = file === "BuddyMac" ? entitlements : file === "buddymac-speech" ? join(root, "scripts/speech-entitlements.plist") : file === "buddymac-camera" ? join(root, "scripts/camera-entitlements.plist") : undefined;
   await sign(join(macos, file), permissions);
 }
-await sign(packagedOCU);
 await sign(stage, entitlements);
 await run(["/usr/bin/codesign", "--verify", "--deep", "--strict", stage]);
-await run(["/usr/bin/codesign", "--verify", "--strict", packagedOCU]);
 if (existsSync(packagedFocusApp)) await run(["/usr/bin/codesign", "--verify", "--strict", packagedFocusApp]);
 await run([join(macos, "BuddyMac"), "--check-runtime"]);
 

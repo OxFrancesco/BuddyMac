@@ -10,7 +10,7 @@ const out = resolve(process.argv[2] ?? 'evidence/files-shelf')
 await mkdir(out, { recursive: true })
 const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_VERIFY_SURFACES: '1',
   BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'),
-  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'),
+  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
   BUDDYMAC_LEGACY_FILES_DIR: join(root, 'no-legacy'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'no-pack.json'),
   BUDDYMAC_TRACE_SURFACES: join(out, 'transitions.log') }
 const fixtures = Array.from({ length: 8 }, (_, index) => join(root, `Shelf fixture ${index + 1}.txt`))

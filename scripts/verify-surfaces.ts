@@ -11,7 +11,7 @@ await mkdir(out, { recursive: true })
 const binary = resolve(process.env.BUDDYMAC_VERIFY_APP ?? 'dist/BuddyMac.app/Contents/MacOS/BuddyMac')
 const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_VERIFY_SURFACES: '1',
   BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'),
-  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'),
+  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
   BUDDYMAC_LEGACY_FILES_DIR: join(root, 'no-legacy'), BUDDYMAC_TRACE_SURFACES: join(out, 'transitions.log') }
 const fixture = join(root, 'Sidebar verification.txt')
 await Bun.write(fixture, 'Synthetic sidebar fixture. The source file must stay intact.')

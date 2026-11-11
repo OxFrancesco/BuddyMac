@@ -143,7 +143,7 @@ void buddymac_menu(void) { @autoreleasepool {
     NSMenuItem *camera=[[NSMenuItem alloc] initWithTitle:@"Show or Hide Camera Preview" action:@selector(choose:) keyEquivalent:@""];
     camera.target=platform; camera.representedObject=@"camera-preview"; [menu addItem:camera];
     [menu addItem:[NSMenuItem separatorItem]];
-    for (NSString *name in @[@"Files",@"Talk",@"Write",@"Focus",@"Dock",@"Liny",@"Camera",@"Settings"]) {
+    for (NSString *name in @[@"Files",@"Talk",@"Write",@"Focus",@"Dock",@"Menu Bar",@"Camera",@"Settings"]) {
         NSMenuItem *item=[[NSMenuItem alloc] initWithTitle:name action:@selector(choose:) keyEquivalent:@""];
         item.target=platform; item.representedObject=name; [menu addItem:item];
     }
@@ -345,6 +345,134 @@ void buddymac_status_title(const char *title) { @autoreleasepool {
     statusItem.button.imagePosition = statusTitle.length ? NSImageLeft : NSImageOnly;
     statusItem.button.font = [NSFont monospacedDigitSystemFontOfSize:12 weight:NSFontWeightMedium];
 }}
+
+// Menu bar icons. Two extra status items: an arrow that the user clicks, and a divider left of it. Icons the user
+// Command-drags left of the divider are hidden by stretching the divider to 10,000 points, which pushes them past
+// the left edge of the menu bar. Nothing reads or moves other apps' items, so no Accessibility or Screen Recording.
+static const CGFloat dividerHiddenLength = 10000;
+static NSStatusItem *menuBarArrow, *menuBarDivider;
+static BOOL menuBarCollapsed;
+static NSTimeInterval menuBarAutoHide;
+static NSTimer *menuBarTimer, *menuBarPlacement;
+static int menuBarPlacementTries;
+static void menuBarCollapse(BOOL collapse);
+
+@interface BuddyMacMenuBar : NSObject
+@end
+@implementation BuddyMacMenuBar
+- (void)arrowClicked:(id)sender { [menuBarPlacement invalidate]; menuBarPlacement = nil; menuBarCollapse(!menuBarCollapsed); }
+- (void)placed:(NSTimer *)timer { menuBarPlacement = nil; menuBarCollapse(YES); }
+- (void)autoHide:(NSTimer *)timer {
+    menuBarTimer = nil;
+    if (!menuBarArrow || menuBarCollapsed) return;
+    // Wait while the pointer is in the menu bar or a button is held: the user may be Command-dragging an icon or reading one.
+    NSPoint point = NSEvent.mouseLocation;
+    BOOL inMenuBar = NO;
+    for (NSScreen *screen in NSScreen.screens) if (NSPointInRect(point, screen.frame) && point.y >= NSMaxY(screen.visibleFrame)) inMenuBar = YES;
+    if (inMenuBar || NSEvent.pressedMouseButtons != 0) {
+        menuBarTimer = [NSTimer timerWithTimeInterval:2 target:self selector:@selector(autoHide:) userInfo:nil repeats:NO];
+        [NSRunLoop.mainRunLoop addTimer:menuBarTimer forMode:NSRunLoopCommonModes];
+        return;
+    }
+    menuBarCollapse(YES);
+}
+@end
+static BuddyMacMenuBar *menuBarTarget;
+
+static NSImage *dividerImage(void) {
+    NSImage *image = [NSImage imageWithSize:NSMakeSize(6, 16) flipped:NO drawingHandler:^BOOL(NSRect rect) {
+        [NSColor.blackColor setFill];
+        NSRectFill(NSMakeRect(2.5, 1, 1, 14));
+        return YES;
+    }];
+    image.template = YES;
+    image.accessibilityDescription = @"BuddyMac menu bar divider";
+    return image;
+}
+
+// New status items start with an empty frame at x = 0, off every menu bar, until macOS moves them in a second or two
+// later, sometimes by way of another display. Their order can be read once both sit in the same display's menu bar.
+// Status windows hang over the top edge of the screen, so only the horizontal position is compared.
+static NSScreen *menuBarScreen(NSWindow *window) {
+    if (!window || NSHeight(window.frame) <= 0 || NSMinX(window.frame) == 0) return nil;
+    for (NSScreen *screen in NSScreen.screens) if (NSMidX(window.frame) >= NSMinX(screen.frame) && NSMidX(window.frame) < NSMaxX(screen.frame)) return screen;
+    return nil;
+}
+static BOOL menuBarPlaced(void) {
+    NSScreen *arrow = menuBarScreen(menuBarArrow.button.window);
+    return arrow && arrow == menuBarScreen(menuBarDivider.button.window);
+}
+
+// The arrow must stay right of the divider, or collapsing would hide the only way back.
+static BOOL menuBarOrderValid(void) {
+    NSWindow *arrow = menuBarArrow.button.window, *divider = menuBarDivider.button.window;
+    if (!arrow || !divider) return YES;
+    return NSMinX(arrow.frame) >= NSMaxX(divider.frame) - 1;
+}
+
+static void menuBarScheduleAutoHide(void) {
+    [menuBarTimer invalidate]; menuBarTimer = nil;
+    if (menuBarCollapsed || menuBarAutoHide <= 0 || !menuBarArrow) return;
+    menuBarTimer = [NSTimer timerWithTimeInterval:menuBarAutoHide target:menuBarTarget selector:@selector(autoHide:) userInfo:nil repeats:NO];
+    [NSRunLoop.mainRunLoop addTimer:menuBarTimer forMode:NSRunLoopCommonModes];
+}
+
+static void menuBarCollapse(BOOL collapse) {
+    if (!menuBarArrow || !menuBarDivider) return;
+    // Until the items are placed their order is unknown. Show them, and hide once macOS has laid them out.
+    BOOL waitForPlacement = collapse && !menuBarCollapsed && !menuBarPlaced();
+    if (waitForPlacement) collapse = NO;
+    else if (collapse && !menuBarCollapsed && !menuBarOrderValid()) {
+        [actions addObject:@"{\"action\":\"menubar-misplaced\"}"];
+        collapse = NO;
+    }
+    menuBarCollapsed = collapse;
+    menuBarDivider.length = collapse ? dividerHiddenLength : NSVariableStatusItemLength;
+    menuBarDivider.button.image = collapse ? nil : dividerImage();
+    menuBarArrow.button.image = [NSImage imageWithSystemSymbolName:collapse ? @"chevron.left" : @"chevron.right" accessibilityDescription:collapse ? @"Show hidden menu bar icons" : @"Hide menu bar icons"];
+    menuBarArrow.button.toolTip = collapse ? @"Show hidden icons" : @"Hide icons left of the divider";
+    menuBarScheduleAutoHide();
+    [menuBarPlacement invalidate]; menuBarPlacement = nil;
+    if (!waitForPlacement) menuBarPlacementTries = 0;
+    else if (menuBarPlacementTries++ < 100) {
+        menuBarPlacement = [NSTimer timerWithTimeInterval:0.1 target:menuBarTarget selector:@selector(placed:) userInfo:nil repeats:NO];
+        [NSRunLoop.mainRunLoop addTimer:menuBarPlacement forMode:NSRunLoopCommonModes];
+    }
+}
+
+// enabled: show the arrow and divider. autoHide: seconds before shown icons hide again, 0 for never. collapse: hide now.
+void buddymac_menubar_configure(bool enabled, double autoHide, bool collapse) { @autoreleasepool {
+    menuBarAutoHide = autoHide > 0 ? autoHide : 0;
+    if (!enabled) {
+        [menuBarTimer invalidate]; menuBarTimer = nil;
+        [menuBarPlacement invalidate]; menuBarPlacement = nil;
+        if (menuBarDivider) [[NSStatusBar systemStatusBar] removeStatusItem:menuBarDivider];
+        if (menuBarArrow) [[NSStatusBar systemStatusBar] removeStatusItem:menuBarArrow];
+        menuBarDivider = nil; menuBarArrow = nil; menuBarCollapsed = NO;
+        return;
+    }
+    if (!menuBarArrow) {
+        if (!menuBarTarget) menuBarTarget = [BuddyMacMenuBar new];
+        // New status items appear left of existing ones, so the arrow lands left of BuddyMac's icon and the divider left
+        // of the arrow. Autosave names make macOS remember where the user drags them.
+        menuBarArrow = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+        menuBarArrow.autosaveName = @"BuddyMacMenuBarArrow";
+        menuBarArrow.button.target = menuBarTarget;
+        menuBarArrow.button.action = @selector(arrowClicked:);
+        menuBarDivider = [[NSStatusBar systemStatusBar] statusItemWithLength:NSVariableStatusItemLength];
+        menuBarDivider.autosaveName = @"BuddyMacMenuBarDivider";
+        menuBarCollapsed = NO;
+    }
+    menuBarCollapse(collapse || menuBarCollapsed);
+}}
+
+// Returns 1 when hidden, 0 when shown, -1 when the arrow and divider are off.
+int buddymac_menubar_toggle(void) { @autoreleasepool {
+    if (!menuBarArrow) return -1;
+    menuBarCollapse(!menuBarCollapsed);
+    return menuBarCollapsed ? 1 : 0;
+}}
+int buddymac_menubar_state(void) { return menuBarArrow ? (menuBarCollapsed ? 1 : 0) : -1; }
 
 static char *pointerJSON;
 const char *buddymac_pointer_state(void) { @autoreleasepool {

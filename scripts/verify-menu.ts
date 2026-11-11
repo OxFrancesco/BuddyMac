@@ -7,10 +7,9 @@ const root = await mkdtemp('/private/tmp/buddymac-menu-')
 const out = resolve(process.argv[2] ?? 'evidence/menu')
 await mkdir(out, { recursive: true })
 const binary = resolve(process.env.BUDDYMAC_VERIFY_APP ?? 'dist/BuddyMac.app/Contents/MacOS/BuddyMac')
-const env = { ...process.env, GPUIX_BACKGROUND: '0', LINY_MOCK: '1', BUDDYMAC_INFERENCE_MOCK: '1',
+const env = { ...process.env, GPUIX_BACKGROUND: '0', BUDDYMAC_INFERENCE_MOCK: '1',
   BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_FOCUS_HOME: join(root, 'focus'),
-  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LINY_HOME: join(root, 'liny'),
-  BUDDYMAC_LINY_SOURCE_HOME: join(root, 'original'), BUDDYMAC_LEGACY_FILES_DIR: join(root, 'no-legacy') }
+  BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'), BUDDYMAC_LEGACY_FILES_DIR: join(root, 'no-legacy') }
 async function run(args: string[]) {
   const child = Bun.spawn(args, { env, stdout: 'pipe', stderr: 'pipe' })
   const [text, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])

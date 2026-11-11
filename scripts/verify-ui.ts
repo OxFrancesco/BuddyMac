@@ -3,7 +3,7 @@ import {mkdir,mkdtemp} from 'node:fs/promises'
 import {resolve,join} from 'node:path'
 import assert from 'node:assert/strict'
 const root=await mkdtemp('/private/tmp/buddymac-ui-')
-const env={...process.env,GPUIX_BACKGROUND:'1',BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LINY_HOME:join(root,'liny'),BUDDYMAC_LEGACY_FILES_DIR:join(root,'legacy'),BUDDYMAC_LEGACY_DOCK_MANIFEST:join(root,'no-pack.json')}
+const env={...process.env,GPUIX_BACKGROUND:'1',BUDDYMAC_DATA_DIR:join(root,'data'),BUDDYMAC_FOCUS_HOME:join(root,'focus'),BUDDYMAC_SPEECH_DATA_DIR:join(root,'speech'),BUDDYMAC_LEGACY_FILES_DIR:join(root,'legacy'),BUDDYMAC_LEGACY_DOCK_MANIFEST:join(root,'no-pack.json')}
 await mkdir(env.BUDDYMAC_LEGACY_FILES_DIR,{recursive:true})
 await mkdir('evidence',{recursive:true})
 const fixture=join(root,'Project notes.txt');await Bun.write(fixture,'BuddyMac UI verification fixture. Originals must stay unchanged.')
@@ -27,8 +27,8 @@ try{
  await app.getByTestId('nav-Talk').click();await app.getByTestId('talk-record').waitFor();await app.screenshot({path:resolve('evidence/buddymac-talk.png')});await app.getByTestId('talk-compact').click();await app.getByTestId('compact-talk').waitFor();await app.screenshot({path:resolve('evidence/buddymac-compact-talk.png')});await app.getByTestId('compact-expand').click();steps.push('Compact recorder mounts and expands without recording');steps.push('Talk view mounts native speech status without recording')
  await app.getByTestId('nav-Dock').click();await app.getByText('No icon pack yet. Choose a BuddyDock manifest or make one in New pack.').waitFor({timeoutMs:15000});await app.screenshot({path:resolve('evidence/buddymac-dock.png')});steps.push('Dock handles missing pack without changing icons')
  assert.equal(await Bun.file(fixture).text(),'BuddyMac UI verification fixture. Originals must stay unchanged.')
- await app.getByTestId('nav-Liny').click();await app.getByTestId('liny-input').waitFor();await app.screenshot({path:resolve('evidence/buddymac-liny.png')});
- steps.push('Liny input mounts in the bundled GPUix UI');
+ await app.getByTestId('nav-Menu Bar').click();await app.getByTestId('menubar-enabled').waitFor();await app.getByTestId('menubar-enabled').click();for(let i=0;i<40&&!(await Bun.file(join(root,'data/surfaces.json')).exists()&&(await Bun.file(join(root,'data/surfaces.json')).json()).menuBar?.enabled);i++)await Bun.sleep(100);assert.equal((await Bun.file(join(root,'data/surfaces.json')).json()).menuBar.enabled,true);await app.screenshot({path:resolve('evidence/buddymac-menubar.png')});
+ steps.push('Menu Bar hidden icons turn on and persist without touching the real menu bar');
  await Bun.write('evidence/ui-verification.json',JSON.stringify({verifiedAt:new Date().toISOString(),executable:packaged??'development',kind:'native GPUix UI with isolated fixture stores',steps,limits:['No provider request, microphone, real file drag, or live icon mutation exercised.']},null,2))
  console.log(JSON.stringify({passed:steps.length,steps}))
 }catch(error){console.error('Completed steps:',steps);throw error}finally{recording=false;await capture;await app.close();if(captured.length>1){const list=captured.map((frame,index)=>`file '${frame.path}'\nduration ${((captured[index+1]?.time??frame.time+500)-frame.time)/1000}`).join('\n');await Bun.write(join(frames,'frames.txt'),list+`\nfile '${captured.at(-1)!.path}'\n`);const video=Bun.spawn(['ffmpeg','-y','-loglevel','error','-f','concat','-safe','0','-i',join(frames,'frames.txt'),'-vf','scale=1080:760:force_original_aspect_ratio=decrease,pad=1080:760:(ow-iw)/2:(oh-ih)/2:black,setsar=1','-pix_fmt','yuv420p','-movflags','+faststart',resolve('evidence/buddymac-walkthrough.mp4')],{stdout:'inherit',stderr:'inherit'});assert.equal(await video.exited,0)}}

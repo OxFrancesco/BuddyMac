@@ -23,8 +23,8 @@ const inspector = join(native, 'buddymac-dock-inspector')
 await Bun.write(inspector, `#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify(${JSON.stringify(apps)}));\n`)
 await chmod(inspector, 0o700)
 const log = join(root, 'requests.jsonl')
-const env = { ...process.env, GPUIX_BACKGROUND: '1', LINY_MOCK: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_NATIVE_DIR: native, BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
-  BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LINY_HOME: join(root, 'liny'), BUDDYMAC_LINY_SOURCE_HOME: join(root, 'original'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json'),
+const env = { ...process.env, GPUIX_BACKGROUND: '1', BUDDYMAC_DATA_DIR: join(root, 'data'), BUDDYMAC_NATIVE_DIR: native, BUDDYMAC_SPEECH_DATA_DIR: join(root, 'speech'),
+  BUDDYMAC_FOCUS_HOME: join(root, 'focus'), BUDDYMAC_LEGACY_DOCK_MANIFEST: join(root, 'none.json'),
   BUDDYMAC_INFERENCE_MOCK: '1', BUDDYMAC_INFERENCE_FIXTURE_IMAGE: image, BUDDYMAC_INFERENCE_FIXTURE_DELAY_MS: '3000', BUDDYMAC_INFERENCE_FIXTURE_LOG: log, BUDDYMAC_INFERENCE_FIXTURE_FAIL: '"Broken"' }
 const executable = process.env.BUDDYMAC_VERIFY_APP
 const app = await launch({ command: executable ?? process.execPath, args: executable ? [] : ['src/app.tsx'], env })

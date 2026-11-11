@@ -21,6 +21,9 @@ const library=dlopen(resolve(root,'libbuddymac.dylib'),{
  buddymac_show_window:{args:[],returns:FFIType.void},
  buddymac_window_visible:{args:[],returns:FFIType.bool},
  buddymac_window_key:{args:[],returns:FFIType.bool},
+ buddymac_menubar_configure:{args:[FFIType.bool,FFIType.f64,FFIType.bool],returns:FFIType.void},
+ buddymac_menubar_toggle:{args:[],returns:FFIType.int},
+ buddymac_menubar_state:{args:[],returns:FFIType.int},
 })
 function cString(value:string){return Buffer.from(value+'\0')}
 export function initializePlatform(){const path=cString(packaged?resolve(root,'../Resources/fonts'):resolve(import.meta.dir,'../assets/fonts'));library.symbols.buddymac_init(ptr(path))}
@@ -71,3 +74,8 @@ export function pointerState():PointerState{return JSON.parse(String(library.sym
 export const hideWindow=()=>library.symbols.buddymac_hide_window()
 export const windowVisible=()=>library.symbols.buddymac_window_visible()
 export const windowKey=()=>library.symbols.buddymac_window_key()
+/** -1: arrow and divider are off, 0: icons shown, 1: icons left of the divider hidden. */
+export type MenuBarState=-1|0|1
+export const configureMenuBar=(enabled:boolean,autoHideSeconds:number,collapse:boolean)=>library.symbols.buddymac_menubar_configure(enabled,autoHideSeconds,collapse)
+export const toggleMenuBar=()=>library.symbols.buddymac_menubar_toggle() as MenuBarState
+export const menuBarState=()=>library.symbols.buddymac_menubar_state() as MenuBarState
